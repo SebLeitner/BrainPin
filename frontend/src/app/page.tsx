@@ -34,7 +34,7 @@ export default function HomePage() {
           <h1 className="text-3xl font-bold text-slate-50 sm:text-4xl">BrainPin</h1>
         </div>
         <Link
-          href="/settings"
+          href="/settings/"
           className="inline-flex items-center gap-2 self-start rounded-full border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-brand-400 hover:text-brand-100"
         >
           <Cog6ToothIcon className="h-5 w-5" />
