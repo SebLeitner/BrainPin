@@ -1,0 +1,19 @@
+# Terraform state and cache
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+terraform.tfvars.json
+override.tf
+override.tf.json
+*.override.tf
+*.override.tf.json
+
+# Node / Next.js artifacts
+node_modules/
+.next/
+out/
+.DS_Store
+
