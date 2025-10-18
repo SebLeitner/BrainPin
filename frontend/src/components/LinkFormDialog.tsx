@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { shallow } from "zustand/shallow";
 import { Modal } from "@/components/Modal";
 import { useLinksStore } from "@/store/useLinksStore";
 import type { LinkItem } from "@/types/links";
@@ -22,7 +23,11 @@ export function LinkFormDialog({
   onDelete,
   onClose
 }: LinkFormDialogProps) {
-  const categories = useLinksStore((state) => state.categories.filter((category) => category.id !== "all"));
+  const allCategories = useLinksStore((state) => state.categories, shallow);
+  const categories = useMemo(
+    () => allCategories.filter((category) => category.id !== "all"),
+    [allCategories]
+  );
   const [name, setName] = useState(initialValues?.name ?? "");
   const [url, setUrl] = useState(initialValues?.url ?? "");
   const [description, setDescription] = useState(initialValues?.description ?? "");
