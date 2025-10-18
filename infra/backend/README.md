@@ -1,12 +1,12 @@
 # BrainPin Backend Infrastructure (Terraform)
 
-This Terraform stack provisions the AWS resources for the BrainPin backend API that manages link entries (create, update, delete, list).
+This Terraform stack provisions the AWS resources for the BrainPin backend API that manages link and category entries (create, update, delete, list).
 
 ## Architecture Overview
 
 The configuration deploys the following components:
 
-- **Amazon DynamoDB** table for persisting link metadata.
+- **Amazon DynamoDB** tables for persisting link and category metadata.
 - **AWS Lambda** function (packaged from `lambda/app.py`) that exposes CRUD operations against the table.
 - **Amazon API Gateway HTTP API** that fronts the Lambda function and enforces CORS.
 - **CloudWatch Log Groups** for both Lambda and API Gateway access logs.
@@ -57,6 +57,7 @@ allowed_cors_origin          = "https://brainpin.leitnersoft.com"
 
 The Lambda source code lives in [`lambda/app.py`](lambda/app.py). Terraform automatically
 creates a ZIP package using the `archive_file` data source, so no manual S3 upload is required.
+The handler now exposes CRUD operations for both `/links` and `/categories` resources, backed by dedicated DynamoDB tables.
 
 ## Usage
 
