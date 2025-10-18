@@ -1,5 +1,8 @@
-infra/frontend/.terraform.lock.hcl
-infra/frontend/.terraform/
+
+infra/backend/terraform.tfstate.backup
+infra/frontend/terraform.tfstate.backup
 infra/backend/.terraform.lock.hcl
 infra/backend/.terraform/
 infra/backend/build/
+infra/frontend/.terraform.lock.hcl
+infra/frontend/.terraform/
