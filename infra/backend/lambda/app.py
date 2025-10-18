@@ -21,9 +21,11 @@ LOGGER.setLevel(logging.INFO)
 
 ALLOWED_ORIGIN = os.environ.get("ALLOWED_ORIGIN", "*")
 TABLE_NAME = os.environ["TABLE_NAME"]
+CATEGORIES_TABLE_NAME = os.environ["CATEGORIES_TABLE_NAME"]
 
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(TABLE_NAME)
+categories_table = dynamodb.Table(CATEGORIES_TABLE_NAME)
 
 
 class HttpError(Exception):
@@ -171,6 +173,138 @@ def _list_links() -> Dict[str, Any]:
     return response(200, {"links": [_serialize(item) for item in items]})
 
 
+def _serialize_category(item: Dict[str, Any]) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
+        "id": item["category_id"],
+        "name": item["name"],
+    }
+    if "description" in item:
+        payload["description"] = item["description"]
+    return payload
+
+
+def _generate_category_id() -> str:
+    return f"cat-{uuid.uuid4().hex[:12]}"
+
+
+def _list_categories() -> Dict[str, Any]:
+    items: List[Dict[str, Any]] = []
+    start_key = None
+    while True:
+        kwargs: Dict[str, Any] = {}
+        if start_key:
+            kwargs["ExclusiveStartKey"] = start_key
+        result = categories_table.scan(**kwargs)
+        items.extend(result.get("Items", []))
+        start_key = result.get("LastEvaluatedKey")
+        if not start_key:
+            break
+    return response(200, {"categories": [_serialize_category(item) for item in items]})
+
+
+def _create_category(event_body: Dict[str, Any]) -> Dict[str, Any]:
+    name = _validate_string(event_body.get("name"), "name", max_length=128)
+    description = _validate_description(event_body.get("description"))
+
+    category_id = _generate_category_id()
+    item: Dict[str, Any] = {
+        "category_id": category_id,
+        "name": name,
+    }
+    if description is not None:
+        item["description"] = description
+
+    try:
+        categories_table.put_item(
+            Item=item,
+            ConditionExpression="attribute_not_exists(category_id)",
+        )
+    except ClientError as exc:  # pragma: no cover - defensive branch
+        if exc.response["Error"].get("Code") == "ConditionalCheckFailedException":
+            raise HttpError(409, "Category already exists") from exc
+        LOGGER.exception("Failed to create category")
+        raise
+
+    return response(201, {"category": _serialize_category(item)})
+
+
+def _get_category(category_id: str) -> Dict[str, Any]:
+    result = categories_table.get_item(Key={"category_id": category_id})
+    item = result.get("Item")
+    if not item:
+        raise HttpError(404, "Category not found")
+    return response(200, {"category": _serialize_category(item)})
+
+
+def _update_category(category_id: str, event_body: Dict[str, Any]) -> Dict[str, Any]:
+    if not event_body:
+        raise HttpError(400, "Request body must contain at least one field to update")
+
+    set_statements: List[str] = []
+    remove_statements: List[str] = []
+    names: Dict[str, str] = {}
+    values: Dict[str, Any] = {}
+
+    if "name" in event_body:
+        name = _validate_string(event_body["name"], "name", max_length=128)
+        names["#n"] = "name"
+        values[":n"] = name
+        set_statements.append("#n = :n")
+
+    if "description" in event_body:
+        description = _validate_description(event_body["description"])
+        names["#d"] = "description"
+        if description is None:
+            remove_statements.append("#d")
+        else:
+            values[":d"] = description
+            set_statements.append("#d = :d")
+
+    if not set_statements and not remove_statements:
+        raise HttpError(400, "No updatable fields provided")
+
+    update_expr_parts: List[str] = []
+    if set_statements:
+        update_expr_parts.append("SET " + ", ".join(set_statements))
+    if remove_statements:
+        update_expr_parts.append("REMOVE " + ", ".join(remove_statements))
+
+    update_expression = " ".join(update_expr_parts)
+
+    try:
+        result = categories_table.update_item(
+            Key={"category_id": category_id},
+            UpdateExpression=update_expression,
+            ExpressionAttributeNames=names or None,
+            ExpressionAttributeValues=values or None,
+            ConditionExpression="attribute_exists(category_id)",
+            ReturnValues="ALL_NEW",
+        )
+    except ClientError as exc:
+        if exc.response["Error"].get("Code") == "ConditionalCheckFailedException":
+            raise HttpError(404, "Category not found") from exc
+        LOGGER.exception("Failed to update category")
+        raise
+
+    attributes = result.get("Attributes", {})
+    return response(200, {"category": _serialize_category(attributes)})
+
+
+def _delete_category(category_id: str) -> Dict[str, Any]:
+    try:
+        categories_table.delete_item(
+            Key={"category_id": category_id},
+            ConditionExpression="attribute_exists(category_id)",
+        )
+    except ClientError as exc:
+        if exc.response["Error"].get("Code") == "ConditionalCheckFailedException":
+            raise HttpError(404, "Category not found") from exc
+        LOGGER.exception("Failed to delete category")
+        raise
+
+    return response(204, None)
+
+
 def _create_link(event_body: Dict[str, Any]) -> Dict[str, Any]:
     name = _validate_string(event_body.get("name"), "name", max_length=128)
     url = _validate_url(event_body.get("url"))
@@ -291,17 +425,25 @@ def _delete_link(link_id: str) -> Dict[str, Any]:
     return response(204, None)
 
 
-def _extract_link_id(event: Dict[str, Any]) -> Optional[str]:
+def _extract_resource_id(event: Dict[str, Any], collection: str, *, parameter_name: str) -> Optional[str]:
     path_parameters = event.get("pathParameters") or {}
-    link_id = path_parameters.get("linkId")
-    if link_id:
-        return link_id
+    candidate = path_parameters.get(parameter_name)
+    if candidate:
+        return candidate
 
     raw_path = event.get("rawPath", "")
     segments = [segment for segment in raw_path.split("/") if segment]
-    if len(segments) >= 2 and segments[0] == "links":
+    if len(segments) >= 2 and segments[0] == collection:
         return segments[1]
     return None
+
+
+def _extract_link_id(event: Dict[str, Any]) -> Optional[str]:
+    return _extract_resource_id(event, "links", parameter_name="linkId")
+
+
+def _extract_category_id(event: Dict[str, Any]) -> Optional[str]:
+    return _extract_resource_id(event, "categories", parameter_name="categoryId")
 
 
 @with_error_handling
@@ -315,23 +457,44 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:  # noqa: ANN
         return response(204, None)
 
     raw_path = event.get("rawPath", "")
-    if method == "GET" and raw_path == "/links":
-        return _list_links()
+    if raw_path.startswith("/links"):
+        if method == "GET" and raw_path == "/links":
+            return _list_links()
+        if method == "POST" and raw_path == "/links":
+            body = _parse_json_body(event)
+            return _create_link(body)
 
-    if method == "POST" and raw_path == "/links":
-        body = _parse_json_body(event)
-        return _create_link(body)
+        link_id = _extract_link_id(event)
+        if not link_id:
+            raise HttpError(404, "Route not found")
 
-    link_id = _extract_link_id(event)
-    if not link_id:
-        raise HttpError(404, "Route not found")
+        if method == "GET":
+            return _get_link(link_id)
+        if method == "PUT":
+            body = _parse_json_body(event)
+            return _update_link(link_id, body)
+        if method == "DELETE":
+            return _delete_link(link_id)
+        raise HttpError(405, "Method not allowed")
 
-    if method == "GET":
-        return _get_link(link_id)
-    if method == "PUT":
-        body = _parse_json_body(event)
-        return _update_link(link_id, body)
-    if method == "DELETE":
-        return _delete_link(link_id)
+    if raw_path.startswith("/categories"):
+        if method == "GET" and raw_path == "/categories":
+            return _list_categories()
+        if method == "POST" and raw_path == "/categories":
+            body = _parse_json_body(event)
+            return _create_category(body)
 
-    raise HttpError(405, "Method not allowed")
+        category_id = _extract_category_id(event)
+        if not category_id:
+            raise HttpError(404, "Route not found")
+
+        if method == "GET":
+            return _get_category(category_id)
+        if method == "PUT":
+            body = _parse_json_body(event)
+            return _update_category(category_id, body)
+        if method == "DELETE":
+            return _delete_category(category_id)
+        raise HttpError(405, "Method not allowed")
+
+    raise HttpError(404, "Route not found")

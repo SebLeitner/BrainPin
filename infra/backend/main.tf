@@ -32,11 +32,16 @@ locals {
   }, var.tags)
 
   routes = {
-    "GET /links"             = { method = "GET",    path = "/links" }
-    "POST /links"            = { method = "POST",   path = "/links" }
-    "GET /links/{linkId}"    = { method = "GET",    path = "/links/{linkId}" }
-    "PUT /links/{linkId}"    = { method = "PUT",    path = "/links/{linkId}" }
-    "DELETE /links/{linkId}" = { method = "DELETE", path = "/links/{linkId}" }
+    "GET /links"                 = { method = "GET",    path = "/links" }
+    "POST /links"                = { method = "POST",   path = "/links" }
+    "GET /links/{linkId}"        = { method = "GET",    path = "/links/{linkId}" }
+    "PUT /links/{linkId}"        = { method = "PUT",    path = "/links/{linkId}" }
+    "DELETE /links/{linkId}"     = { method = "DELETE", path = "/links/{linkId}" }
+    "GET /categories"            = { method = "GET",    path = "/categories" }
+    "POST /categories"           = { method = "POST",   path = "/categories" }
+    "GET /categories/{categoryId}"    = { method = "GET",    path = "/categories/{categoryId}" }
+    "PUT /categories/{categoryId}"    = { method = "PUT",    path = "/categories/{categoryId}" }
+    "DELETE /categories/{categoryId}" = { method = "DELETE", path = "/categories/{categoryId}" }
   }
 }
 
@@ -53,6 +58,19 @@ resource "aws_dynamodb_table" "links" {
 
   attribute {
     name = "link_id"
+    type = "S"
+  }
+
+  tags = local.tags
+}
+
+resource "aws_dynamodb_table" "categories" {
+  name         = "${local.name_prefix}-categories"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "category_id"
+
+  attribute {
+    name = "category_id"
     type = "S"
   }
 
@@ -97,7 +115,9 @@ data "aws_iam_policy_document" "lambda_dynamodb" {
 
     resources = [
       aws_dynamodb_table.links.arn,
-      "${aws_dynamodb_table.links.arn}/index/*"
+      "${aws_dynamodb_table.links.arn}/index/*",
+      aws_dynamodb_table.categories.arn,
+      "${aws_dynamodb_table.categories.arn}/index/*"
     ]
   }
 }
@@ -132,8 +152,9 @@ resource "aws_lambda_function" "links" {
 
   environment {
     variables = merge({
-      TABLE_NAME    = aws_dynamodb_table.links.name
-      ALLOWED_ORIGIN = var.allowed_cors_origin
+      TABLE_NAME             = aws_dynamodb_table.links.name
+      CATEGORIES_TABLE_NAME  = aws_dynamodb_table.categories.name
+      ALLOWED_ORIGIN         = var.allowed_cors_origin
     }, var.lambda_environment)
   }
 
@@ -249,4 +270,9 @@ output "lambda_function_name" {
 output "dynamodb_table_name" {
   description = "Name of the DynamoDB table storing links"
   value       = aws_dynamodb_table.links.name
+}
+
+output "dynamodb_categories_table_name" {
+  description = "Name of the DynamoDB table storing categories"
+  value       = aws_dynamodb_table.categories.name
 }
