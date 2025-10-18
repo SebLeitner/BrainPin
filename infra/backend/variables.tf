@@ -22,22 +22,6 @@ variable "allowed_cors_origin" {
   default     = "https://brainpin.leitnersoft.com"
 }
 
-variable "lambda_package_s3_bucket" {
-  description = "Name of the S3 bucket that stores the Lambda deployment package"
-  type        = string
-}
-
-variable "lambda_package_s3_key" {
-  description = "S3 key of the Lambda deployment package"
-  type        = string
-}
-
-variable "lambda_package_s3_object_version" {
-  description = "Optional S3 object version for the Lambda package to ensure immutable deployments"
-  type        = string
-  default     = null
-}
-
 variable "lambda_runtime" {
   description = "Runtime for the Lambda function"
   type        = string

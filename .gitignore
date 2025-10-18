@@ -1,2 +1,5 @@
 infra/frontend/.terraform.lock.hcl
 infra/frontend/.terraform/
+infra/backend/.terraform.lock.hcl
+infra/backend/.terraform/
+infra/backend/build/
