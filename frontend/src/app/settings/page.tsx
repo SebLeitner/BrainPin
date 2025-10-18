@@ -1,17 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeftIcon, PencilSquareIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { CategoryFormDialog } from "@/components/CategoryFormDialog";
 import { LinkFormDialog } from "@/components/LinkFormDialog";
-import { useLinksStore, type LinkItem } from "@/store/useLinksStore";
+import { useLinksStore } from "@/store/useLinksStore";
+import type { LinkItem } from "@/types/links";
 
 export default function SettingsPage() {
   const {
     categories,
     allCategories,
     links,
+    isLoading,
+    error,
+    loadLinks,
     addCategory,
     updateCategory,
     deleteCategory,
@@ -22,6 +26,9 @@ export default function SettingsPage() {
     categories: state.categories.filter((category) => category.id !== "all"),
     allCategories: state.categories,
     links: state.links,
+    isLoading: state.isLoading,
+    error: state.error,
+    loadLinks: state.loadLinks,
     addCategory: state.addCategory,
     updateCategory: state.updateCategory,
     deleteCategory: state.deleteCategory,
@@ -29,6 +36,10 @@ export default function SettingsPage() {
     updateLink: state.updateLink,
     deleteLink: state.deleteLink
   }));
+
+  useEffect(() => {
+    void loadLinks();
+  }, [loadLinks]);
 
   const [isCategoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [categoryDialogMode, setCategoryDialogMode] = useState<"create" | "edit">("create");
@@ -72,11 +83,21 @@ export default function SettingsPage() {
     }
   };
 
-  const handleDeleteCategory = (categoryId: string) => {
+  const handleDeleteCategory = async (categoryId: string) => {
     const category = categories.find((item) => item.id === categoryId);
     if (!category) return;
-    if (confirm(`Kategorie "${category.name}" wirklich löschen?`)) {
-      deleteCategory(categoryId);
+    if (!confirm(`Kategorie "${category.name}" wirklich löschen?`)) {
+      return;
+    }
+
+    try {
+      await deleteCategory(categoryId);
+    } catch (deleteError) {
+      if (deleteError instanceof Error) {
+        alert(`Kategorie konnte nicht gelöscht werden: ${deleteError.message}`);
+      } else {
+        alert("Kategorie konnte nicht gelöscht werden.");
+      }
     }
   };
 
@@ -92,23 +113,24 @@ export default function SettingsPage() {
     setLinkDialogOpen(true);
   };
 
-  const handleLinkSubmit = (values: Omit<LinkItem, "id">) => {
+  const handleLinkSubmit = async (values: Omit<LinkItem, "id">) => {
     if (linkDialogMode === "create") {
-      addLink(values);
+      await addLink(values);
     } else if (linkDialogMode === "edit" && editingLink) {
-      updateLink(editingLink.id, values);
+      await updateLink(editingLink.id, values);
     }
   };
 
-  const confirmDeleteLink = (link: LinkItem) => {
-    if (confirm(`Link "${link.name}" wirklich löschen?`)) {
-      deleteLink(link.id);
-      if (editingLink?.id === link.id) {
-        setEditingLink(null);
-      }
-      return true;
+  const confirmDeleteLink = async (link: LinkItem) => {
+    if (!confirm(`Link "${link.name}" wirklich löschen?`)) {
+      return false;
     }
-    return false;
+
+    await deleteLink(link.id);
+    if (editingLink?.id === link.id) {
+      setEditingLink(null);
+    }
+    return true;
   };
 
   return (
@@ -130,6 +152,21 @@ export default function SettingsPage() {
 
       <section className="space-y-3">
         <h2 className="text-xl font-semibold text-slate-100">Status</h2>
+        {error ? (
+          <div className="rounded-2xl border border-rose-500/60 bg-rose-900/20 p-4 text-sm text-rose-200">
+            <p className="font-medium">Fehler bei einer Aktion oder beim Laden.</p>
+            <p className="mt-1 text-rose-100/80">{error}</p>
+            <button
+              type="button"
+              onClick={() => {
+                void loadLinks({ force: true });
+              }}
+              className="mt-3 inline-flex items-center rounded-full border border-rose-400 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-rose-100 transition hover:border-rose-200 hover:text-rose-50"
+            >
+              Erneut laden
+            </button>
+          </div>
+        ) : null}
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
             <p className="text-sm uppercase tracking-wide text-slate-400">Kategorien</p>
@@ -144,6 +181,7 @@ export default function SettingsPage() {
             <p className="mt-1 text-sm text-slate-400">
               Links erscheinen dort als klickbare Kacheln. Hier kannst du sie anlegen, bearbeiten oder entfernen.
             </p>
+            {isLoading ? <p className="mt-3 text-xs text-slate-500">Synchronisation läuft…</p> : null}
           </div>
         </div>
       </section>
@@ -180,7 +218,9 @@ export default function SettingsPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleDeleteCategory(category.id)}
+                    onClick={() => {
+                      void handleDeleteCategory(category.id);
+                    }}
                     className="inline-flex items-center gap-2 rounded-full border border-rose-600 px-3 py-1 text-xs text-rose-300 hover:bg-rose-600/10 hover:text-rose-200"
                   >
                     <TrashIcon className="h-4 w-4" /> Löschen
@@ -239,7 +279,15 @@ export default function SettingsPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => confirmDeleteLink(link)}
+                    onClick={() => {
+                      void confirmDeleteLink(link).catch((deleteError) => {
+                        if (deleteError instanceof Error) {
+                          alert(`Link konnte nicht gelöscht werden: ${deleteError.message}`);
+                        } else {
+                          alert("Link konnte nicht gelöscht werden.");
+                        }
+                      });
+                    }}
                     className="inline-flex items-center gap-2 rounded-full border border-rose-600 px-3 py-1 text-xs text-rose-300 hover:bg-rose-600/10 hover:text-rose-200"
                   >
                     <TrashIcon className="h-4 w-4" /> Löschen
@@ -294,8 +342,9 @@ export default function SettingsPage() {
         onSubmit={handleLinkSubmit}
         onDelete={
           linkDialogMode === "edit" && editingLink
-            ? () => {
-                if (confirmDeleteLink(editingLink)) {
+            ? async () => {
+                const removed = await confirmDeleteLink(editingLink);
+                if (removed) {
                   setLinkDialogOpen(false);
                 }
               }

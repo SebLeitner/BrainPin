@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { useLinksStore, type LinkItem } from "@/store/useLinksStore";
+import { useLinksStore } from "@/store/useLinksStore";
+import type { LinkItem } from "@/types/links";
 
 export type LinkTileProps = {
   link: LinkItem;

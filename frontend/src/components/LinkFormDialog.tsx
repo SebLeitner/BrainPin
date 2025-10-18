@@ -2,14 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Modal } from "@/components/Modal";
-import { useLinksStore, type LinkItem } from "@/store/useLinksStore";
+import { useLinksStore } from "@/store/useLinksStore";
+import type { LinkItem } from "@/types/links";
 
 export type LinkFormDialogProps = {
   open: boolean;
   mode: "create" | "edit";
   initialValues?: Omit<LinkItem, "id">;
-  onSubmit: (values: Omit<LinkItem, "id">) => void;
-  onDelete?: () => void;
+  onSubmit: (values: Omit<LinkItem, "id">) => Promise<void> | void;
+  onDelete?: () => Promise<void> | void;
   onClose: () => void;
 };
 
@@ -27,6 +28,8 @@ export function LinkFormDialog({
   const [description, setDescription] = useState(initialValues?.description ?? "");
   const [categoryId, setCategoryId] = useState(initialValues?.categoryId ?? categories[0]?.id ?? "");
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setSubmitting] = useState(false);
+  const [isDeleting, setDeleting] = useState(false);
 
   const hasCategories = categories.length > 0;
 
@@ -36,6 +39,8 @@ export function LinkFormDialog({
     setDescription(initialValues?.description ?? "");
     setCategoryId(initialValues?.categoryId ?? categories[0]?.id ?? "");
     setError(null);
+    setSubmitting(false);
+    setDeleting(false);
   }, [initialValues, open, categories]);
 
   const canSubmit = useMemo(() => {
@@ -43,7 +48,9 @@ export function LinkFormDialog({
     return Boolean(trimmed) && trimmed.length <= 16 && Boolean(url.trim()) && Boolean(categoryId) && hasCategories;
   }, [name, url, categoryId, hasCategories]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (isSubmitting || isDeleting) return;
+
     const trimmedName = name.trim();
     const trimmedUrl = url.trim();
     if (!trimmedName) {
@@ -59,13 +66,44 @@ export function LinkFormDialog({
       return;
     }
     setError(null);
-    onSubmit({
-      name: trimmedName,
-      url: trimmedUrl,
-      description: description.trim() || undefined,
-      categoryId
-    });
-    onClose();
+    setSubmitting(true);
+    try {
+      const trimmedDescription = description.trim();
+      await onSubmit({
+        name: trimmedName,
+        url: trimmedUrl,
+        description: trimmedDescription.length > 0 ? trimmedDescription : null,
+        categoryId
+      });
+      onClose();
+    } catch (submitError) {
+      const message =
+        submitError instanceof Error
+          ? submitError.message || "Aktion fehlgeschlagen."
+          : "Aktion fehlgeschlagen.";
+      setError(message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!onDelete || isDeleting || isSubmitting) return;
+
+    setError(null);
+    setDeleting(true);
+    try {
+      await onDelete();
+      onClose();
+    } catch (deleteError) {
+      const message =
+        deleteError instanceof Error
+          ? deleteError.message || "Löschen fehlgeschlagen."
+          : "Löschen fehlgeschlagen.";
+      setError(message);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -78,10 +116,11 @@ export function LinkFormDialog({
           {mode === "edit" && onDelete ? (
             <button
               type="button"
-              onClick={onDelete}
-              className="rounded-full border border-rose-500 px-3 py-2 text-sm text-rose-300 hover:bg-rose-500/10"
+              onClick={handleDelete}
+              disabled={isDeleting || isSubmitting}
+              className="rounded-full border border-rose-500 px-3 py-2 text-sm text-rose-300 hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Löschen
+              {isDeleting ? "Wird gelöscht…" : "Löschen"}
             </button>
           ) : (
             <span />
@@ -90,17 +129,18 @@ export function LinkFormDialog({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:border-slate-500 hover:text-slate-100"
+              disabled={isSubmitting || isDeleting}
+              className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:border-slate-500 hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Abbrechen
             </button>
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={!canSubmit}
+              disabled={!canSubmit || isSubmitting || isDeleting}
               className="rounded-full bg-brand-500 px-4 py-2 text-sm font-semibold text-slate-50 hover:bg-brand-400 disabled:cursor-not-allowed disabled:bg-slate-700"
             >
-              {mode === "create" ? "Speichern" : "Aktualisieren"}
+              {isSubmitting ? "Wird gespeichert…" : mode === "create" ? "Speichern" : "Aktualisieren"}
             </button>
           </div>
         </div>
