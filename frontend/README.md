@@ -56,7 +56,23 @@ Der Zustand lebt vollständig im Client und wird über `useLinksStore` (Zustand)
 - `addLink(payload)` / `updateLink(id, payload)` / `deleteLink(id)` – CRUD für Links mit ID-Generierung via `nanoid`.
 - `getFilteredLinks()` – Selektor, der Filterung serverunabhängig durchführt.
 
-Da der Store derzeit lokal arbeitet, sind alle Daten initial im Frontend codiert. Für Persistenz kann der Store an eine API (REST/GraphQL) angebunden werden; dank zentraler Methoden genügt der Austausch der CRUD-Implementierungen.
+Die lokale Zustandsschicht spiegelt die Daten der Backend-API wider. Sämtliche CRUD-Methoden kapseln die Kommunikation mit dem Service, sodass Komponenten weiterhin nur die Store-Methoden konsumieren müssen.
+
+## Backend-Anbindung
+Die Frontend-Anwendung ist an die produktive BrainPin-API (`AWS API Gateway`) gekoppelt. Die Kommunikation läuft über das HTTP-Interface der Lambda-Funktion:
+
+- `GET /links` – Liefert alle gespeicherten Links.
+- `POST /links` – Legt einen neuen Link an.
+- `PUT /links/{linkId}` – Aktualisiert einen vorhandenen Link.
+- `DELETE /links/{linkId}` – Entfernt einen Link endgültig.
+
+Der API-Basispfad kann über die Umgebungsvariable `NEXT_PUBLIC_API_ENDPOINT` konfiguriert werden. Standardmäßig greift das Frontend auf `https://aw493hkv29.execute-api.eu-central-1.amazonaws.com` zu. Für lokale Entwicklung empfiehlt sich eine `.env.local` Datei im Verzeichnis `frontend/`:
+
+```bash
+NEXT_PUBLIC_API_ENDPOINT=https://aw493hkv29.execute-api.eu-central-1.amazonaws.com
+```
+
+Schlägt eine Anfrage fehl, werden die Fehlermeldungen zentral im Store abgelegt und auf der Start- sowie Einstellungsseite dargestellt. Ein erneuter Ladevorgang lässt sich über die angezeigten Buttons auslösen.
 
 ## Validierung & UX
 - Namen von Kategorien und Links werden auf `trim()` geprüft und dürfen maximal **16 Zeichen** lang sein.
