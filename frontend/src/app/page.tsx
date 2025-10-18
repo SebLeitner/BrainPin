@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import Link from "next/link";
 import { Cog6ToothIcon } from "@heroicons/react/24/outline";
 import { CategoryFilter } from "@/components/CategoryFilter";
@@ -8,10 +8,17 @@ import { LinkTile } from "@/components/LinkTile";
 import { useLinksStore } from "@/store/useLinksStore";
 
 export default function HomePage() {
-  const { links, activeCategoryId } = useLinksStore((state) => ({
+  const { links, activeCategoryId, isLoading, error, loadLinks } = useLinksStore((state) => ({
     links: state.links,
-    activeCategoryId: state.activeCategoryId
+    activeCategoryId: state.activeCategoryId,
+    isLoading: state.isLoading,
+    error: state.error,
+    loadLinks: state.loadLinks
   }));
+
+  useEffect(() => {
+    void loadLinks();
+  }, [loadLinks]);
 
   const filteredLinks = useMemo(() => {
     if (!activeCategoryId || activeCategoryId === "all") {
@@ -36,17 +43,35 @@ export default function HomePage() {
       </header>
 
       <section className="space-y-4">
+        {error ? (
+          <div className="rounded-2xl border border-rose-500/60 bg-rose-900/20 p-4 text-sm text-rose-200">
+            <p className="font-medium">Ein Fehler ist aufgetreten.</p>
+            <p className="mt-1 text-rose-100/80">{error}</p>
+            <button
+              type="button"
+              onClick={() => {
+                void loadLinks({ force: true });
+              }}
+              className="mt-3 inline-flex items-center rounded-full border border-rose-400 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-rose-100 transition hover:border-rose-200 hover:text-rose-50"
+            >
+              Erneut laden
+            </button>
+          </div>
+        ) : null}
         <CategoryFilter />
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {filteredLinks.map((link) => (
             <LinkTile key={link.id} link={link} />
           ))}
-          {filteredLinks.length === 0 ? (
+          {filteredLinks.length === 0 && !isLoading ? (
             <p className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/60 p-6 text-sm text-slate-400">
               Noch keine Links in dieser Kategorie. Füge neue Links hinzu, um deine Sammlung zu erweitern.
             </p>
           ) : null}
         </div>
+        {isLoading ? (
+          <p className="text-sm text-slate-400">Links werden geladen…</p>
+        ) : null}
       </section>
     </main>
   );
