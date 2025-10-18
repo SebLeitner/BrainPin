@@ -84,6 +84,13 @@ npm run start
 ```
 `next start` startet den Produktionsserver und sollte hinter einem Reverse Proxy (z. B. Nginx, AWS ALB) betrieben werden.
 
+Für einen statischen Export (z. B. S3 + CloudFront) steht zusätzlich folgender Befehl zur Verfügung:
+
+```bash
+npm run build:static
+```
+Der Export landet im Ordner `out/`.
+
 ## Qualitätssicherung
 - **Linting:** `npm run lint`
 - **Type Checking:** Next.js führt während des Builds Typprüfungen aus. Für inkrementelle Checks kann `npx tsc --noEmit` verwendet werden.
@@ -124,14 +131,23 @@ AWS Amplify ist der schnellste Weg, ein Next.js-14-Projekt mit SSR zu hosten.
 4. **Domain:** Amplify stellt eine *.amplifyapp.com*-Domain bereit. Eigene Domains lassen sich via Route 53 oder externem Registrar verbinden.
 5. **Continuous Deployment:** Commits auf dem verbundenen Branch triggern automatische Builds und Rollouts. Rollbacks können in der UI vorgenommen werden.
 
+### GitHub Actions Deployment (S3 + CloudFront)
+Dieses Repository enthält einen Workflow unter [`.github/workflows/deploy-frontend.yml`](../.github/workflows/deploy-frontend.yml), der den statischen Export automatisiert auf S3/CloudFront bereitstellt.
+
+1. **Secrets konfigurieren:** Hinterlege in den Repository-Einstellungen die AWS-Credentials als Secrets `AWS_ACCESS_KEY_ID` und `AWS_SECRET_ACCESS_KEY`. Der verwendete Benutzer benötigt Zugriff auf `s3:List*`, `s3:PutObject*`, `s3:DeleteObject*` für den Bucket sowie `cloudfront:CreateInvalidation` für die Distribution.
+2. **Optional: Region überschreiben:** Standardmäßig wird `eu-central-1` genutzt. Bei Bedarf kann über ein Repository- oder Organisations-Variable `AWS_REGION` ein anderer Wert gesetzt werden.
+3. **Build & Deploy:** Bei Pushes auf `main`, die Dateien unter `frontend/` betreffen, führt der Workflow `npm run build:static` aus, synchronisiert `frontend/out` mit dem Bucket `brainpin-frontend-prod-140023375269` und invalidiert die CloudFront-Distribution `E2N7KMOABLKE5P`.
+4. **Manueller Trigger:** Über den `workflow_dispatch`-Trigger lässt sich ein Deployment jederzeit manuell anstoßen.
+
+> **Hinweis:** Die Infrastruktur (Terraform) wird weiterhin manuell verwaltet. Der Workflow führt ausschließlich den Upload des statischen Bundles sowie die Cache-Invalidierung durch.
+
 ### Alternative: S3 + CloudFront (Static Export)
 Wenn ausschließlich statische Inhalte nötig sind, können Sie `next export` verwenden. Da die BrainPin-App keine serverseitigen Funktionen nutzt, ist eine statische Bereitstellung möglich.
 
 1. **Konfiguration prüfen:** Stellen Sie sicher, dass `output: 'export'` in `next.config.mjs` gesetzt wird, falls nur statische Routen verwendet werden sollen.
 2. **Export ausführen:**
    ```bash
-   npm run build
-   npx next export
+   npm run build:static
    ```
    Der Export liegt im Verzeichnis `out/`.
 3. **S3-Bucket anlegen:** Erstellen Sie einen öffentlichen (oder via CloudFront geschützten) S3-Bucket, aktivieren Sie statisches Website-Hosting.

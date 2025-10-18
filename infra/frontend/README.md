@@ -57,13 +57,26 @@ terraform plan
 terraform apply
 ```
 
-Once Terraform finishes, upload the built Next.js assets to the generated S3 bucket (see the `bucket_name` output). For example, after running `npm run build && npm run export` in the `frontend/` project, sync the `out/` directory:
+Once Terraform finishes, upload the built Next.js assets to the generated S3 bucket (see the `bucket_name` output). For example, after running `npm run build:static` in the `frontend/` project, sync the `out/` directory:
 
 ```bash
 aws s3 sync ../frontend/out s3://$(terraform output -raw bucket_name) --delete
 ```
 
 CloudFront may take several minutes to deploy or pick up new files; invalidations can be triggered via the AWS console or CLI when deploying updates.
+
+### Production Outputs
+
+For the current production environment, the stack was applied manually and produced the following outputs:
+
+| Output | Value |
+|--------|-------|
+| `bucket_name` | `brainpin-frontend-prod-140023375269` |
+| `cloudfront_distribution_id` | `E2N7KMOABLKE5P` |
+| `cloudfront_domain_name` | `d1fv73t015hmo1.cloudfront.net` |
+| `route53_record_fqdn` | `brainpin.leitnersoft.com` |
+
+These values are referenced by the automated deployment workflow to sync assets and issue cache invalidations.
 
 ## Cleanup
 
