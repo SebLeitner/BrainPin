@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeftIcon, PencilSquareIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { CategoryFormDialog } from "@/components/CategoryFormDialog";
 import { LinkFormDialog } from "@/components/LinkFormDialog";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { useLinksStore } from "@/store/useLinksStore";
 import type { LinkItem } from "@/types/links";
 
@@ -150,6 +151,13 @@ export default function SettingsPage() {
         </div>
       </header>
 
+      {isLoading ? (
+        <LoadingSpinner
+          label="Daten werden synchronisiert…"
+          className="mx-auto rounded-2xl border border-slate-800 bg-slate-900/60 p-6"
+        />
+      ) : null}
+
       <section className="space-y-3">
         <h2 className="text-xl font-semibold text-slate-100">Status</h2>
         {error ? (
@@ -181,7 +189,6 @@ export default function SettingsPage() {
             <p className="mt-1 text-sm text-slate-400">
               Links erscheinen dort als klickbare Kacheln. Hier kannst du sie anlegen, bearbeiten oder entfernen.
             </p>
-            {isLoading ? <p className="mt-3 text-xs text-slate-500">Synchronisation läuft…</p> : null}
           </div>
         </div>
       </section>

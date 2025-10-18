@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Cog6ToothIcon } from "@heroicons/react/24/outline";
 import { CategoryFilter } from "@/components/CategoryFilter";
 import { LinkTile } from "@/components/LinkTile";
+import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { useLinksStore } from "@/store/useLinksStore";
 
 export default function HomePage() {
@@ -43,6 +44,12 @@ export default function HomePage() {
       </header>
 
       <section className="space-y-4">
+        {isLoading ? (
+          <LoadingSpinner
+            label="Links und Kategorien werden geladen…"
+            className="mx-auto rounded-2xl border border-slate-800 bg-slate-900/60 p-6"
+          />
+        ) : null}
         {error ? (
           <div className="rounded-2xl border border-rose-500/60 bg-rose-900/20 p-4 text-sm text-rose-200">
             <p className="font-medium">Ein Fehler ist aufgetreten.</p>
@@ -69,9 +76,6 @@ export default function HomePage() {
             </p>
           ) : null}
         </div>
-        {isLoading ? (
-          <p className="text-sm text-slate-400">Links werden geladen…</p>
-        ) : null}
       </section>
     </main>
   );
