@@ -161,13 +161,19 @@ resource "aws_cloudfront_function" "add_trailing_slash" {
   code = <<-EOF
 function handler(event) {
   var request = event.request;
-  var uri = request.uri;
+  var uri = request.uri || '';
 
-  if (!uri || uri === '/' || uri.includes('.') || uri.endsWith('/')) {
+  if (!uri || uri === '/') {
+    request.uri = '/index.html';
     return request;
   }
 
-  if (uri.startsWith('/_next') || uri.startsWith('/api/')) {
+  if (uri.includes('.') || uri.startsWith('/_next') || uri.startsWith('/api/')) {
+    return request;
+  }
+
+  if (uri.endsWith('/')) {
+    request.uri = uri + 'index.html';
     return request;
   }
 
