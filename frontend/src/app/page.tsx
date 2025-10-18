@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Cog6ToothIcon } from "@heroicons/react/24/outline";
 import { CategoryFilter } from "@/components/CategoryFilter";
@@ -17,16 +17,38 @@ export default function HomePage() {
     loadLinks: state.loadLinks
   }));
 
+  const [searchTerm, setSearchTerm] = useState("");
+
   useEffect(() => {
     void loadLinks();
   }, [loadLinks]);
 
-  const filteredLinks = useMemo(() => {
+  const categoryFilteredLinks = useMemo(() => {
     if (!activeCategoryId || activeCategoryId === "all") {
       return links;
     }
     return links.filter((link) => link.categoryId === activeCategoryId);
   }, [links, activeCategoryId]);
+
+  const filteredLinks = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    if (!normalizedSearch) {
+      return categoryFilteredLinks;
+    }
+
+    return categoryFilteredLinks.filter((link) => {
+      const name = link.name.toLowerCase();
+      const url = link.url.toLowerCase();
+      const description = link.description?.toLowerCase() ?? "";
+
+      return (
+        name.includes(normalizedSearch) ||
+        url.includes(normalizedSearch) ||
+        description.includes(normalizedSearch)
+      );
+    });
+  }, [categoryFilteredLinks, searchTerm]);
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-10 px-4 py-10 sm:px-8">
@@ -65,14 +87,29 @@ export default function HomePage() {
             </button>
           </div>
         ) : null}
-        <CategoryFilter />
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <CategoryFilter />
+          <div className="w-full lg:max-w-sm">
+            <label htmlFor="search" className="sr-only">
+              Suchbegriff eingeben
+            </label>
+            <input
+              id="search"
+              type="text"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Suche nach Name, URL oder Beschreibung"
+              className="w-full rounded-full border border-slate-700 bg-slate-900/60 px-4 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+            />
+          </div>
+        </div>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {filteredLinks.map((link) => (
             <LinkTile key={link.id} link={link} />
           ))}
           {filteredLinks.length === 0 && !isLoading ? (
             <p className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/60 p-6 text-sm text-slate-400">
-              Noch keine Links in dieser Kategorie. Füge neue Links hinzu, um deine Sammlung zu erweitern.
+              Keine Links gefunden. Passe deine Kategorieauswahl oder den Suchbegriff an.
             </p>
           ) : null}
         </div>
