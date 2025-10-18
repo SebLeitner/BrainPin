@@ -1,7 +1,6 @@
 "use client";
 
 import { PencilSquareIcon, TrashIcon } from "@heroicons/react/24/outline";
-import Link from "next/link";
 import { useMemo } from "react";
 import { useLinksStore, type LinkItem } from "@/store/useLinksStore";
 
@@ -59,7 +58,7 @@ export function LinkTile({ link, onEdit }: LinkTileProps) {
           </button>
         </div>
       </div>
-      <Link
+      <a
         href={link.url}
         target="_blank"
         rel="noopener noreferrer"
@@ -67,7 +66,7 @@ export function LinkTile({ link, onEdit }: LinkTileProps) {
       >
         Öffnen
         <span className="text-xs font-normal text-slate-900/80">{hostname}</span>
-      </Link>
+      </a>
     </div>
   );
 }
