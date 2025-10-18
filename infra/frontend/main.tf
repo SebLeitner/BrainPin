@@ -128,6 +128,11 @@ resource "aws_cloudfront_distribution" "frontend" {
         forward = "none"
       }
     }
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.add_trailing_slash.arn
+    }
   }
 
   restrictions {
@@ -145,6 +150,66 @@ resource "aws_cloudfront_distribution" "frontend" {
   default_root_object = "index.html"
 
   tags = local.tags
+}
+
+resource "aws_cloudfront_function" "add_trailing_slash" {
+  name    = replace("${local.domain_name}-trailing-slash", ".", "-")
+  comment = "Redirect extensionless paths to a trailing slash"
+  runtime = "cloudfront-js-1.0"
+  publish = true
+
+  code = <<-EOF
+function handler(event) {
+  var request = event.request;
+  var uri = request.uri;
+
+  if (!uri || uri === '/' || uri.includes('.') || uri.endsWith('/')) {
+    return request;
+  }
+
+  if (uri.startsWith('/_next') || uri.startsWith('/api/')) {
+    return request;
+  }
+
+  var querystring = request.querystring || {};
+  var queryKeys = Object.keys(querystring);
+  var location = uri + '/';
+
+  if (queryKeys.length > 0) {
+    var params = [];
+    for (var i = 0; i < queryKeys.length; i++) {
+      var key = queryKeys[i];
+      var entry = querystring[key];
+      if (!entry) {
+        continue;
+      }
+
+      if (entry.multiValue && entry.multiValue.length > 0) {
+        for (var j = 0; j < entry.multiValue.length; j++) {
+          var mv = entry.multiValue[j];
+          params.push(key + '=' + mv.value);
+        }
+      } else if (entry.value !== undefined) {
+        params.push(key + '=' + entry.value);
+      } else {
+        params.push(key);
+      }
+    }
+
+    if (params.length > 0) {
+      location += '?' + params.join('&');
+    }
+  }
+
+  return {
+    statusCode: 301,
+    statusDescription: 'Moved Permanently',
+    headers: {
+      location: { value: location }
+    }
+  };
+}
+EOF
 }
 
 data "aws_iam_policy_document" "frontend" {
