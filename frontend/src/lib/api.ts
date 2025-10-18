@@ -52,7 +52,12 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
     throw new Error("API endpoint is not configured");
   }
 
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  const requestUrl = `${apiBaseUrl}${path}`;
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[api] →", requestUrl, init);
+  }
+
+  const response = await fetch(requestUrl, {
     ...init,
     headers: {
       "Content-Type": "application/json",
@@ -60,6 +65,10 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
     },
     mode: "cors"
   });
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[api] ←", requestUrl, response.status, response.statusText);
+  }
 
   if (!response.ok) {
     throw new Error(await extractErrorMessage(response));
