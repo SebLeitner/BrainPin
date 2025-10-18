@@ -7,7 +7,7 @@ export type CategoryFormDialogProps = {
   open: boolean;
   initialName?: string;
   mode: "create" | "edit";
-  onSubmit: (name: string) => void;
+  onSubmit: (name: string) => Promise<void>;
   onClose: () => void;
 };
 
@@ -20,13 +20,17 @@ export function CategoryFormDialog({
 }: CategoryFormDialogProps) {
   const [name, setName] = useState(initialName);
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     setName(initialName);
     setError(null);
+    setSubmitting(false);
   }, [initialName, open]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (isSubmitting) return;
+
     const trimmed = name.trim();
     if (!trimmed) {
       setError("Name darf nicht leer sein.");
@@ -36,8 +40,20 @@ export function CategoryFormDialog({
       setError("Maximal 16 Zeichen erlaubt.");
       return;
     }
-    onSubmit(trimmed);
-    onClose();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await onSubmit(trimmed);
+      onClose();
+    } catch (submitError) {
+      const message =
+        submitError instanceof Error
+          ? submitError.message || "Aktion fehlgeschlagen."
+          : "Aktion fehlgeschlagen.";
+      setError(message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -50,16 +66,18 @@ export function CategoryFormDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:border-slate-500 hover:text-slate-100"
+            disabled={isSubmitting}
+            className="rounded-full border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:border-slate-500 hover:text-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
           >
             Abbrechen
           </button>
           <button
             type="button"
             onClick={handleSubmit}
-            className="rounded-full bg-brand-500 px-4 py-2 text-sm font-semibold text-slate-50 hover:bg-brand-400"
+            disabled={isSubmitting}
+            className="rounded-full bg-brand-500 px-4 py-2 text-sm font-semibold text-slate-50 hover:bg-brand-400 disabled:cursor-not-allowed disabled:bg-slate-700"
           >
-            {mode === "create" ? "Erstellen" : "Speichern"}
+            {isSubmitting ? "Wird gespeichert…" : mode === "create" ? "Erstellen" : "Speichern"}
           </button>
         </>
       }

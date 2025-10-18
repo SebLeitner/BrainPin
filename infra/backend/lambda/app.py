@@ -14,6 +14,7 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 import boto3
+from boto3.dynamodb.conditions import Attr
 from botocore.exceptions import ClientError
 
 LOGGER = logging.getLogger()
@@ -202,6 +203,39 @@ def _list_categories() -> Dict[str, Any]:
     return response(200, {"categories": [_serialize_category(item) for item in items]})
 
 
+def _assert_category_exists(category_id: str) -> None:
+    try:
+        result = categories_table.get_item(
+            Key={"category_id": category_id},
+            ProjectionExpression="category_id",
+        )
+    except ClientError:  # pragma: no cover - defensive branch
+        LOGGER.exception("Failed to validate category existence")
+        raise
+
+    if not result.get("Item"):
+        raise HttpError(400, "categoryId must reference an existing category")
+
+
+def _category_has_links(category_id: str) -> bool:
+    start_key = None
+    while True:
+        scan_kwargs: Dict[str, Any] = {
+            "FilterExpression": Attr("category_id").eq(category_id),
+            "ProjectionExpression": "link_id",
+        }
+        if start_key:
+            scan_kwargs["ExclusiveStartKey"] = start_key
+
+        result = table.scan(**scan_kwargs)
+        if result.get("Items"):
+            return True
+
+        start_key = result.get("LastEvaluatedKey")
+        if not start_key:
+            return False
+
+
 def _create_category(event_body: Dict[str, Any]) -> Dict[str, Any]:
     name = _validate_string(event_body.get("name"), "name", max_length=128)
     description = _validate_description(event_body.get("description"))
@@ -291,6 +325,9 @@ def _update_category(category_id: str, event_body: Dict[str, Any]) -> Dict[str, 
 
 
 def _delete_category(category_id: str) -> Dict[str, Any]:
+    if _category_has_links(category_id):
+        raise HttpError(409, "Category cannot be deleted while links reference it")
+
     try:
         categories_table.delete_item(
             Key={"category_id": category_id},
@@ -310,6 +347,8 @@ def _create_link(event_body: Dict[str, Any]) -> Dict[str, Any]:
     url = _validate_url(event_body.get("url"))
     category_id = _validate_string(event_body.get("categoryId"), "categoryId", max_length=64)
     description = _validate_description(event_body.get("description"))
+
+    _assert_category_exists(category_id)
 
     link_id = _generate_link_id()
     item: Dict[str, Any] = {
@@ -366,6 +405,7 @@ def _update_link(link_id: str, event_body: Dict[str, Any]) -> Dict[str, Any]:
 
     if "categoryId" in event_body:
         category_id = _validate_string(event_body["categoryId"], "categoryId", max_length=64)
+        _assert_category_exists(category_id)
         names["#c"] = "category_id"
         values[":c"] = category_id
         set_statements.append("#c = :c")

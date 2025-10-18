@@ -14,7 +14,7 @@ type ApiLinkResponse = {
   name: string;
   url: string;
   categoryId: string;
-  description?: string;
+  description?: string | null;
 };
 
 type ListLinksResponse = {
@@ -23,6 +23,25 @@ type ListLinksResponse = {
 
 type LinkResponse = {
   link: ApiLinkResponse;
+};
+
+export type ApiCategoryPayload = {
+  name: string;
+  description?: string | null;
+};
+
+type ApiCategoryResponse = {
+  id: string;
+  name: string;
+  description?: string | null;
+};
+
+type ListCategoriesResponse = {
+  categories: ApiCategoryResponse[];
+};
+
+type CategoryResponse = {
+  category: ApiCategoryResponse;
 };
 
 const isJsonResponse = (response: Response) => {
@@ -106,6 +125,30 @@ export const linkApi = {
   },
   remove: async (linkId: string) => {
     await request<void>(`/links/${linkId}`, { method: "DELETE" });
+  }
+};
+
+export const categoryApi = {
+  list: async () => {
+    const data = await request<ListCategoriesResponse>("/categories");
+    return data.categories;
+  },
+  create: async (payload: ApiCategoryPayload) => {
+    const data = await request<CategoryResponse>("/categories", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    return data.category;
+  },
+  update: async (categoryId: string, payload: Partial<ApiCategoryPayload>) => {
+    const data = await request<CategoryResponse>(`/categories/${categoryId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    });
+    return data.category;
+  },
+  remove: async (categoryId: string) => {
+    await request<void>(`/categories/${categoryId}`, { method: "DELETE" });
   }
 };
 
