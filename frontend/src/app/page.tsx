@@ -50,6 +50,14 @@ export default function HomePage() {
     });
   }, [categoryFilteredLinks, searchTerm]);
 
+  const sortedLinks = useMemo(
+    () =>
+      [...filteredLinks].sort((a, b) =>
+        a.name.localeCompare(b.name, "de", { sensitivity: "base" })
+      ),
+    [filteredLinks]
+  );
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-10 px-4 py-10 sm:px-8">
       <header className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
@@ -104,10 +112,10 @@ export default function HomePage() {
           </div>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {filteredLinks.map((link) => (
+          {sortedLinks.map((link) => (
             <LinkTile key={link.id} link={link} />
           ))}
-          {filteredLinks.length === 0 && !isLoading ? (
+          {sortedLinks.length === 0 && !isLoading ? (
             <p className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/60 p-6 text-sm text-slate-400">
               Keine Links gefunden. Passe deine Kategorieauswahl oder den Suchbegriff an.
             </p>
