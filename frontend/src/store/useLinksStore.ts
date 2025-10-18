@@ -1,7 +1,6 @@
-import { nanoid } from "nanoid";
 import { create } from "zustand";
 
-import { linkApi, type ApiLinkPayload } from "@/lib/api";
+import { categoryApi, linkApi, type ApiLinkPayload } from "@/lib/api";
 import type { Category, LinkItem } from "@/types/links";
 
 type LoadOptions = {
@@ -19,20 +18,20 @@ type StoreState = {
   setActiveCategory: (categoryId: string | null) => void;
   clearError: () => void;
   loadLinks: (options?: LoadOptions) => Promise<void>;
-  addCategory: (name: string) => void;
-  updateCategory: (categoryId: string, name: string) => void;
+  addCategory: (name: string) => Promise<void>;
+  updateCategory: (categoryId: string, name: string) => Promise<void>;
   deleteCategory: (categoryId: string) => Promise<void>;
   addLink: (payload: Omit<LinkItem, "id">) => Promise<void>;
   updateLink: (linkId: string, payload: Partial<Omit<LinkItem, "id">>) => Promise<void>;
   deleteLink: (linkId: string) => Promise<void>;
 };
 
-const DEFAULT_CATEGORIES: Category[] = [
-  { id: "all", name: "Alle" },
-  { id: "dev", name: "Dev" },
-  { id: "design", name: "Design" },
-  { id: "learn", name: "Lernen" }
-];
+const ALL_CATEGORY: Category = { id: "all", name: "Alle" };
+
+const withoutAll = (categories: Category[]) =>
+  categories.filter((category) => category.id !== ALL_CATEGORY.id);
+
+const withAllPrefix = (categories: Category[]) => [ALL_CATEGORY, ...withoutAll(categories)];
 
 const filteredLinks = (state: Pick<StoreState, "links" | "activeCategoryId">) => {
   if (!state.activeCategoryId || state.activeCategoryId === "all") {
@@ -40,41 +39,6 @@ const filteredLinks = (state: Pick<StoreState, "links" | "activeCategoryId">) =>
   }
 
   return state.links.filter((link) => link.categoryId === state.activeCategoryId);
-};
-
-const toTitleCase = (value: string) => {
-  return value
-    .split(/[-_\s]+/)
-    .filter(Boolean)
-    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
-    .join(" ")
-    .trim();
-};
-
-const ensureCategory = (categories: Category[], categoryId: string): Category[] => {
-  if (!categoryId || categoryId === "all") {
-    return categories;
-  }
-
-  if (categories.some((category) => category.id === categoryId)) {
-    return categories;
-  }
-
-  const name = toTitleCase(categoryId) || categoryId;
-  return [...categories, { id: categoryId, name }];
-};
-
-const mergeCategoriesFromLinks = (categories: Category[], links: LinkItem[]) => {
-  let nextCategories = categories;
-  const processed = new Set<string>();
-
-  for (const link of links) {
-    if (processed.has(link.categoryId)) continue;
-    processed.add(link.categoryId);
-    nextCategories = ensureCategory(nextCategories, link.categoryId);
-  }
-
-  return nextCategories;
 };
 
 const sanitizePayload = (payload: Omit<LinkItem, "id">): ApiLinkPayload => {
@@ -162,7 +126,7 @@ const withErrorHandling = async <T>(handler: () => Promise<T>, onError: (message
 };
 
 export const useLinksStore = create<StoreState>((set, get) => ({
-  categories: DEFAULT_CATEGORIES,
+  categories: [ALL_CATEGORY],
   links: [],
   activeCategoryId: null,
   isLoading: false,
@@ -186,52 +150,81 @@ export const useLinksStore = create<StoreState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const links = await linkApi.list();
-      set((state) => ({
-        links,
-        categories: mergeCategoriesFromLinks(state.categories, links),
-        isLoading: false,
-        hasLoaded: true,
-        error: null
-      }));
+      const [links, categories] = await Promise.all([
+        linkApi.list(),
+        categoryApi.list()
+      ]);
+
+      set((state) => {
+        const nextCategories = withAllPrefix(categories);
+        const activeCategoryId = state.activeCategoryId;
+        const isActiveCategoryValid =
+          !activeCategoryId ||
+          nextCategories.some((category) => category.id === activeCategoryId);
+
+        return {
+          links,
+          categories: nextCategories,
+          activeCategoryId: isActiveCategoryValid ? activeCategoryId : null,
+          isLoading: false,
+          hasLoaded: true,
+          error: null
+        };
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Links konnten nicht geladen werden.";
       set({ isLoading: false, error: message, hasLoaded: force ? false : get().hasLoaded });
     }
   },
-  addCategory: (name) => {
+  addCategory: async (name) => {
     const trimmed = name.trim();
-    if (!trimmed || trimmed.length > 16) return;
-    set((state) => ({
-      categories: [...state.categories, { id: nanoid(6), name: trimmed }]
-    }));
-  },
-  updateCategory: (categoryId, name) => {
-    const trimmed = name.trim();
-    if (!trimmed || trimmed.length > 16) return;
-    set((state) => ({
-      categories: state.categories.map((category) =>
-        category.id === categoryId ? { ...category, name: trimmed } : category
-      )
-    }));
-  },
-  deleteCategory: async (categoryId) => {
-    if (categoryId === "all") return;
-
-    const state = get();
-    const linksToDelete = state.links.filter((link) => link.categoryId === categoryId);
+    if (!trimmed || trimmed.length > 16) {
+      throw new Error("Name darf nicht leer sein und maximal 16 Zeichen lang sein.");
+    }
 
     set({ error: null });
 
     await withErrorHandling(
       async () => {
-        for (const link of linksToDelete) {
-          await linkApi.remove(link.id);
-        }
+        const category = await categoryApi.create({ name: trimmed });
+        set((state) => ({
+          categories: withAllPrefix([...withoutAll(state.categories), category])
+        }));
+      },
+      (message) => set({ error: message })
+    );
+  },
+  updateCategory: async (categoryId, name) => {
+    const trimmed = name.trim();
+    if (!trimmed || trimmed.length > 16) {
+      throw new Error("Name darf nicht leer sein und maximal 16 Zeichen lang sein.");
+    }
 
+    set({ error: null });
+
+    await withErrorHandling(
+      async () => {
+        const category = await categoryApi.update(categoryId, { name: trimmed });
+        set((state) => ({
+          categories: withAllPrefix(
+            withoutAll(state.categories).map((item) =>
+              item.id === categoryId ? category : item
+            )
+          )
+        }));
+      },
+      (message) => set({ error: message })
+    );
+  },
+  deleteCategory: async (categoryId) => {
+    if (categoryId === "all") return;
+    set({ error: null });
+
+    await withErrorHandling(
+      async () => {
+        await categoryApi.remove(categoryId);
         set((current) => ({
           categories: current.categories.filter((category) => category.id !== categoryId),
-          links: current.links.filter((link) => link.categoryId !== categoryId),
           activeCategoryId: current.activeCategoryId === categoryId ? null : current.activeCategoryId
         }));
       },
@@ -247,8 +240,7 @@ export const useLinksStore = create<StoreState>((set, get) => ({
       async () => {
         const link = await linkApi.create(sanitized);
         set((state) => ({
-          links: [...state.links, link],
-          categories: ensureCategory(state.categories, link.categoryId)
+          links: [...state.links, link]
         }));
       },
       (message) => set({ error: message })
@@ -267,8 +259,7 @@ export const useLinksStore = create<StoreState>((set, get) => ({
       async () => {
         const updated = await linkApi.update(linkId, sanitized);
         set((state) => ({
-          links: state.links.map((link) => (link.id === linkId ? updated : link)),
-          categories: ensureCategory(state.categories, updated.categoryId)
+          links: state.links.map((link) => (link.id === linkId ? updated : link))
         }));
       },
       (message) => set({ error: message })

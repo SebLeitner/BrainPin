@@ -107,3 +107,97 @@ def test_category_crud_flow():
 
     missing_response = app.handler(get_event, None)
     assert missing_response["statusCode"] == 404
+
+
+@mock_aws()
+def test_links_require_existing_categories_and_block_category_deletion():
+    os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+    os.environ["TABLE_NAME"] = "test-links"
+    os.environ["CATEGORIES_TABLE_NAME"] = "test-categories"
+    os.environ["ALLOWED_ORIGIN"] = "https://example.org"
+
+    app = load_lambda_app()
+    dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+
+    dynamodb.create_table(
+        TableName=os.environ["TABLE_NAME"],
+        KeySchema=[{"AttributeName": "link_id", "KeyType": "HASH"}],
+        AttributeDefinitions=[{"AttributeName": "link_id", "AttributeType": "S"}],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
+    dynamodb.create_table(
+        TableName=os.environ["CATEGORIES_TABLE_NAME"],
+        KeySchema=[{"AttributeName": "category_id", "KeyType": "HASH"}],
+        AttributeDefinitions=[{"AttributeName": "category_id", "AttributeType": "S"}],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
+    create_category_event = {
+        "rawPath": "/categories",
+        "requestContext": {"http": {"method": "POST"}},
+        "body": json.dumps({"name": "Reading"}),
+        "isBase64Encoded": False,
+    }
+
+    category_response = app.handler(create_category_event, None)
+    category_id = json.loads(category_response["body"])["category"]["id"]
+
+    link_event = {
+        "rawPath": "/links",
+        "requestContext": {"http": {"method": "POST"}},
+        "body": json.dumps({
+            "name": "Example",
+            "url": "https://example.org",
+            "categoryId": category_id,
+        }),
+        "isBase64Encoded": False,
+    }
+
+    link_response = app.handler(link_event, None)
+    assert link_response["statusCode"] == 201
+    link_id = json.loads(link_response["body"])["link"]["id"]
+
+    invalid_link_event = {
+        **link_event,
+        "body": json.dumps({
+            "name": "Bad",
+            "url": "https://invalid.example",
+            "categoryId": "cat-missing",
+        }),
+    }
+
+    invalid_link_response = app.handler(invalid_link_event, None)
+    assert invalid_link_response["statusCode"] == 400
+
+    update_event = {
+        "rawPath": f"/links/{link_id}",
+        "pathParameters": {"linkId": link_id},
+        "requestContext": {"http": {"method": "PUT"}},
+        "body": json.dumps({"categoryId": "cat-missing"}),
+        "isBase64Encoded": False,
+    }
+
+    update_response = app.handler(update_event, None)
+    assert update_response["statusCode"] == 400
+
+    delete_category_event = {
+        "rawPath": f"/categories/{category_id}",
+        "pathParameters": {"categoryId": category_id},
+        "requestContext": {"http": {"method": "DELETE"}},
+    }
+
+    blocked_delete = app.handler(delete_category_event, None)
+    assert blocked_delete["statusCode"] == 409
+
+    delete_link_event = {
+        "rawPath": f"/links/{link_id}",
+        "pathParameters": {"linkId": link_id},
+        "requestContext": {"http": {"method": "DELETE"}},
+    }
+
+    delete_link_response = app.handler(delete_link_event, None)
+    assert delete_link_response["statusCode"] == 204
+
+    allowed_delete = app.handler(delete_category_event, None)
+    assert allowed_delete["statusCode"] == 204

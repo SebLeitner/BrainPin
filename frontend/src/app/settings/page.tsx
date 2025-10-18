@@ -75,11 +75,11 @@ export default function SettingsPage() {
     setCategoryDialogOpen(true);
   };
 
-  const handleCategorySubmit = (name: string) => {
+  const handleCategorySubmit = async (name: string) => {
     if (categoryDialogMode === "create") {
-      addCategory(name);
+      await addCategory(name);
     } else if (categoryDialogMode === "edit" && categoryDialogId) {
-      updateCategory(categoryDialogId, name);
+      await updateCategory(categoryDialogId, name);
     }
   };
 
