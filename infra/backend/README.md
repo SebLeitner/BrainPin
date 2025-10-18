@@ -7,7 +7,7 @@ This Terraform stack provisions the AWS resources for the BrainPin backend API t
 The configuration deploys the following components:
 
 - **Amazon DynamoDB** table for persisting link metadata.
-- **AWS Lambda** function that exposes CRUD operations against the table.
+- **AWS Lambda** function (packaged from `lambda/app.py`) that exposes CRUD operations against the table.
 - **Amazon API Gateway HTTP API** that fronts the Lambda function and enforces CORS.
 - **CloudWatch Log Groups** for both Lambda and API Gateway access logs.
 - **IAM Roles and Policies** granting the Lambda permission to interact with DynamoDB and publish logs.
@@ -26,7 +26,7 @@ The API is designed with production-ready defaults derived from our internal COR
 
 - Terraform ≥ 1.5
 - AWS credentials with permissions to manage Lambda, API Gateway, DynamoDB, IAM, and CloudWatch Logs
-- A deployment-ready Lambda artifact uploaded to S3
+- Python 3.11 (only required when you want to run the Lambda code locally for tests)
 
 ## Configuration
 
@@ -38,9 +38,6 @@ Key variables are exposed in `variables.tf`:
 | `project_name` | Naming prefix & tagging | `brainpin-backend` |
 | `environment` | Environment suffix | `prod` |
 | `allowed_cors_origin` | Origin allowed by CORS and passed to the Lambda | `https://brainpin.leitnersoft.com` |
-| `lambda_package_s3_bucket` | S3 bucket that stores the Lambda deployment package | _(required)_ |
-| `lambda_package_s3_key` | S3 key of the Lambda package | _(required)_ |
-| `lambda_package_s3_object_version` | Optional S3 object version for immutable deployments | `null` |
 | `lambda_runtime` | Lambda runtime | `python3.11` |
 | `lambda_handler` | Entry point in the Lambda package | `app.handler` |
 | `lambda_memory_size` | Lambda memory allocation | `512` |
@@ -56,10 +53,10 @@ aws_region                   = "eu-central-1"
 project_name                 = "brainpin-backend"
 environment                  = "prod"
 allowed_cors_origin          = "https://brainpin.leitnersoft.com"
-lambda_package_s3_bucket     = "brainpin-artifacts"
-lambda_package_s3_key        = "backend/links-handler.zip"
-lambda_package_s3_object_version = "3Lc4P2Yvh6h4.."
 ```
+
+The Lambda source code lives in [`lambda/app.py`](lambda/app.py). Terraform automatically
+creates a ZIP package using the `archive_file` data source, so no manual S3 upload is required.
 
 ## Usage
 

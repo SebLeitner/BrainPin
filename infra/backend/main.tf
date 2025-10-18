@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    archive = {
+      source  = "hashicorp/archive"
+      version = ">= 2.4.0"
+    }
   }
 }
 
@@ -34,6 +38,12 @@ locals {
     "PUT /links/{linkId}"    = { method = "PUT",    path = "/links/{linkId}" }
     "DELETE /links/{linkId}" = { method = "DELETE", path = "/links/{linkId}" }
   }
+}
+
+data "archive_file" "lambda_package" {
+  type        = "zip"
+  source_dir  = "${path.module}/lambda"
+  output_path = "${path.module}/build/links-handler.zip"
 }
 
 resource "aws_dynamodb_table" "links" {
@@ -117,9 +127,8 @@ resource "aws_lambda_function" "links" {
   memory_size   = var.lambda_memory_size
   timeout       = var.lambda_timeout
 
-  s3_bucket         = var.lambda_package_s3_bucket
-  s3_key            = var.lambda_package_s3_key
-  s3_object_version = var.lambda_package_s3_object_version
+  filename         = data.archive_file.lambda_package.output_path
+  source_code_hash = data.archive_file.lambda_package.output_base64sha256
 
   environment {
     variables = merge({
