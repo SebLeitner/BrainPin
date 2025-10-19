@@ -1,7 +1,7 @@
 import { create } from "zustand";
 
 import { categoryApi, linkApi, type ApiLinkPayload } from "@/lib/api";
-import type { Category, LinkItem } from "@/types/links";
+import type { Category, LinkItem, SublinkItem } from "@/types/links";
 
 type LoadOptions = {
   force?: boolean;
@@ -41,6 +41,43 @@ const filteredLinks = (state: Pick<StoreState, "links" | "activeCategoryId">) =>
   return state.links.filter((link) => link.categoryId === state.activeCategoryId);
 };
 
+const sanitizeSublinks = (sublinks?: SublinkItem[]): SublinkItem[] => {
+  if (!sublinks) {
+    return [];
+  }
+
+  return sublinks.map((sublink) => {
+    const trimmedId = sublink.id.trim();
+    const trimmedName = sublink.name.trim();
+    const trimmedUrl = sublink.url.trim();
+    const rawDescription = sublink.description;
+    const trimmedDescription =
+      typeof rawDescription === "string" ? rawDescription.trim() : "";
+
+    if (!trimmedId) {
+      throw new Error("Sublink benötigt eine gültige ID.");
+    }
+    if (!trimmedName) {
+      throw new Error("Sublink-Name darf nicht leer sein.");
+    }
+    if (!trimmedUrl) {
+      throw new Error("Sublink-URL darf nicht leer sein.");
+    }
+
+    return {
+      id: trimmedId,
+      name: trimmedName,
+      url: trimmedUrl,
+      description:
+        typeof rawDescription === "string"
+          ? trimmedDescription.length > 0
+            ? trimmedDescription
+            : null
+          : rawDescription ?? null
+    };
+  });
+};
+
 const sanitizePayload = (payload: Omit<LinkItem, "id">): ApiLinkPayload => {
   const trimmedName = payload.name.trim();
   const trimmedUrl = payload.url.trim();
@@ -71,7 +108,8 @@ const sanitizePayload = (payload: Omit<LinkItem, "id">): ApiLinkPayload => {
     name: trimmedName,
     url: trimmedUrl,
     categoryId: payload.categoryId,
-    description
+    description,
+    sublinks: sanitizeSublinks(payload.sublinks)
   };
 };
 
@@ -110,6 +148,10 @@ const sanitizeUpdatePayload = (
       const trimmed = payload.description.trim();
       result.description = trimmed.length > 0 ? trimmed : null;
     }
+  }
+
+  if (payload.sublinks !== undefined) {
+    result.sublinks = sanitizeSublinks(payload.sublinks);
   }
 
   return result;

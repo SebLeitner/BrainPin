@@ -2,12 +2,24 @@ const DEFAULT_API_BASE_URL = "https://aw493hkv29.execute-api.eu-central-1.amazon
 
 const apiBaseUrl = (process.env.NEXT_PUBLIC_API_ENDPOINT ?? DEFAULT_API_BASE_URL).replace(/\/$/, "");
 
+export type SublinkItem = {
+  id: string;
+  name: string;
+  url: string;
+  description?: string | null;
+};
+
+export type ApiSublinkPayload = Omit<SublinkItem, "id"> & { id?: string };
+
 export type ApiLinkPayload = {
   name: string;
   url: string;
   categoryId: string;
   description?: string | null;
+  sublinks: SublinkItem[];
 };
+
+type ApiSublinkResponse = SublinkItem;
 
 type ApiLinkResponse = {
   id: string;
@@ -15,6 +27,7 @@ type ApiLinkResponse = {
   url: string;
   categoryId: string;
   description?: string | null;
+  sublinks: ApiSublinkResponse[];
 };
 
 type ListLinksResponse = {
@@ -125,6 +138,30 @@ export const linkApi = {
   },
   remove: async (linkId: string) => {
     await request<void>(`/links/${linkId}`, { method: "DELETE" });
+  },
+  addSublink: async (linkId: string, payload: ApiSublinkPayload) => {
+    const data = await request<LinkResponse>(`/links/${linkId}/sublinks`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    return data.link;
+  },
+  updateSublink: async (
+    linkId: string,
+    sublinkId: string,
+    payload: Partial<ApiSublinkPayload>
+  ) => {
+    const data = await request<LinkResponse>(`/links/${linkId}/sublinks/${sublinkId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    });
+    return data.link;
+  },
+  removeSublink: async (linkId: string, sublinkId: string) => {
+    const data = await request<LinkResponse>(`/links/${linkId}/sublinks/${sublinkId}`, {
+      method: "DELETE"
+    });
+    return data.link;
   }
 };
 
