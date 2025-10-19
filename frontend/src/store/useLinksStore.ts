@@ -20,6 +20,8 @@ type StoreState = {
   hasLoaded: boolean;
   error: string | null;
   getFilteredLinks: () => LinkItem[];
+  getCategoryNameById: (categoryId: string) => string | undefined;
+  getSublinksByLinkId: (linkId: string) => SublinkItem[];
   setActiveCategory: (categoryId: string | null) => void;
   clearError: () => void;
   loadLinks: (options?: LoadOptions) => Promise<void>;
@@ -163,6 +165,8 @@ const cloneLink = (link: LinkItem): LinkItem => ({
   sublinks: link.sublinks.map((sublink) => ({ ...sublink }))
 });
 
+const EMPTY_SUBLINKS: SublinkItem[] = [];
+
 const sanitizePayload = (payload: Omit<LinkItem, "id">): ApiLinkPayload => {
   const trimmedName = payload.name.trim();
   const trimmedUrl = payload.url.trim();
@@ -260,6 +264,14 @@ export const useLinksStore = create<StoreState>((set, get) => ({
   hasLoaded: false,
   error: null,
   getFilteredLinks: () => filteredLinks(get()).map((link) => cloneLink(link)),
+  getCategoryNameById: (categoryId) =>
+    get()
+      .categories.find((category) => category.id === categoryId)
+      ?.name,
+  getSublinksByLinkId: (linkId) => {
+    const link = get().links.find((item) => item.id === linkId);
+    return link ? link.sublinks.map((sublink) => ({ ...sublink })) : [];
+  },
   setActiveCategory: (categoryId) => {
     set({ activeCategoryId: categoryId });
   },
@@ -465,3 +477,14 @@ export const useLinksStore = create<StoreState>((set, get) => ({
     );
   }
 }));
+
+export const selectCategoryNameById = (categoryId: string) => (state: StoreState) =>
+  state.getCategoryNameById(categoryId);
+
+export const selectSublinksByLinkId = (linkId: string) => (state: StoreState) => {
+  const link = state.links.find((item) => item.id === linkId);
+  return link ? link.sublinks : EMPTY_SUBLINKS;
+};
+
+export const selectHasSublinksByLinkId = (linkId: string) => (state: StoreState) =>
+  (state.links.find((item) => item.id === linkId)?.sublinks.length ?? 0) > 0;
