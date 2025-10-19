@@ -1,6 +1,11 @@
 import { create } from "zustand";
 
-import { categoryApi, linkApi, type ApiLinkPayload } from "@/lib/api";
+import {
+  categoryApi,
+  linkApi,
+  type ApiLinkPayload,
+  type ApiSublinkPayload
+} from "@/lib/api";
 import type { Category, LinkItem, SublinkItem } from "@/types/links";
 
 type LoadOptions = {
@@ -24,6 +29,13 @@ type StoreState = {
   addLink: (payload: Omit<LinkItem, "id">) => Promise<void>;
   updateLink: (linkId: string, payload: Partial<Omit<LinkItem, "id">>) => Promise<void>;
   deleteLink: (linkId: string) => Promise<void>;
+  addSublink: (linkId: string, payload: Omit<SublinkItem, "id">) => Promise<LinkItem>;
+  updateSublink: (
+    linkId: string,
+    sublinkId: string,
+    payload: Partial<Omit<SublinkItem, "id">>
+  ) => Promise<LinkItem>;
+  deleteSublink: (linkId: string, sublinkId: string) => Promise<LinkItem>;
 };
 
 const ALL_CATEGORY: Category = { id: "all", name: "Alle" };
@@ -77,6 +89,79 @@ const sanitizeSublinks = (sublinks?: SublinkItem[]): SublinkItem[] => {
     };
   });
 };
+
+const sanitizeSublinkPayload = (payload: Omit<SublinkItem, "id">): ApiSublinkPayload => {
+  const trimmedName = payload.name.trim();
+  const trimmedUrl = payload.url.trim();
+  const rawDescription = payload.description;
+  const trimmedDescription =
+    typeof rawDescription === "string" ? rawDescription.trim() : "";
+
+  if (!trimmedName) {
+    throw new Error("Sublink-Name darf nicht leer sein.");
+  }
+
+  if (!trimmedUrl) {
+    throw new Error("Sublink-URL darf nicht leer sein.");
+  }
+
+  return {
+    name: trimmedName,
+    url: trimmedUrl,
+    description:
+      typeof rawDescription === "string"
+        ? trimmedDescription.length > 0
+          ? trimmedDescription
+          : null
+        : rawDescription ?? null
+  };
+};
+
+const sanitizeSublinkUpdatePayload = (
+  payload: Partial<Omit<SublinkItem, "id">>
+): Partial<ApiSublinkPayload> => {
+  const result: Partial<ApiSublinkPayload> = {};
+
+  if (payload.name !== undefined) {
+    const trimmed = payload.name.trim();
+    if (!trimmed) {
+      throw new Error("Sublink-Name darf nicht leer sein.");
+    }
+    result.name = trimmed;
+  }
+
+  if (payload.url !== undefined) {
+    const trimmed = payload.url.trim();
+    if (!trimmed) {
+      throw new Error("Sublink-URL darf nicht leer sein.");
+    }
+    result.url = trimmed;
+  }
+
+  if (payload.description !== undefined) {
+    if (payload.description === null) {
+      result.description = null;
+    } else {
+      const trimmed = payload.description.trim();
+      result.description = trimmed.length > 0 ? trimmed : null;
+    }
+  }
+
+  return result;
+};
+
+const normalizeLink = (link: LinkItem): LinkItem => {
+  const sanitizedSublinks = sanitizeSublinks(link.sublinks);
+  return {
+    ...link,
+    sublinks: sanitizedSublinks.map((sublink) => ({ ...sublink }))
+  };
+};
+
+const cloneLink = (link: LinkItem): LinkItem => ({
+  ...link,
+  sublinks: link.sublinks.map((sublink) => ({ ...sublink }))
+});
 
 const sanitizePayload = (payload: Omit<LinkItem, "id">): ApiLinkPayload => {
   const trimmedName = payload.name.trim();
@@ -174,7 +259,7 @@ export const useLinksStore = create<StoreState>((set, get) => ({
   isLoading: false,
   hasLoaded: false,
   error: null,
-  getFilteredLinks: () => filteredLinks(get()),
+  getFilteredLinks: () => filteredLinks(get()).map((link) => cloneLink(link)),
   setActiveCategory: (categoryId) => {
     set({ activeCategoryId: categoryId });
   },
@@ -205,7 +290,7 @@ export const useLinksStore = create<StoreState>((set, get) => ({
           nextCategories.some((category) => category.id === activeCategoryId);
 
         return {
-          links,
+          links: links.map((link) => normalizeLink(link)),
           categories: nextCategories,
           activeCategoryId: isActiveCategoryValid ? activeCategoryId : null,
           isLoading: false,
@@ -282,7 +367,7 @@ export const useLinksStore = create<StoreState>((set, get) => ({
       async () => {
         const link = await linkApi.create(sanitized);
         set((state) => ({
-          links: [...state.links, link]
+          links: [...state.links, normalizeLink(link)]
         }));
       },
       (message) => set({ error: message })
@@ -301,7 +386,9 @@ export const useLinksStore = create<StoreState>((set, get) => ({
       async () => {
         const updated = await linkApi.update(linkId, sanitized);
         set((state) => ({
-          links: state.links.map((link) => (link.id === linkId ? updated : link))
+          links: state.links.map((link) =>
+            link.id === linkId ? normalizeLink(updated) : link
+          )
         }));
       },
       (message) => set({ error: message })
@@ -316,6 +403,63 @@ export const useLinksStore = create<StoreState>((set, get) => ({
         set((state) => ({
           links: state.links.filter((link) => link.id !== linkId)
         }));
+      },
+      (message) => set({ error: message })
+    );
+  },
+  addSublink: async (linkId, payload) => {
+    const sanitized = sanitizeSublinkPayload(payload);
+
+    set({ error: null });
+
+    return await withErrorHandling(
+      async () => {
+        const updated = await linkApi.addSublink(linkId, sanitized);
+        const normalized = normalizeLink(updated);
+        set((state) => ({
+          links: state.links.map((link) => (link.id === linkId ? normalized : link))
+        }));
+        return normalized;
+      },
+      (message) => set({ error: message })
+    );
+  },
+  updateSublink: async (linkId, sublinkId, payload) => {
+    const sanitized = sanitizeSublinkUpdatePayload(payload);
+
+    if (Object.keys(sanitized).length === 0) {
+      const current = get().links.find((link) => link.id === linkId);
+      if (!current) {
+        throw new Error("Link wurde nicht gefunden.");
+      }
+      return current;
+    }
+
+    set({ error: null });
+
+    return await withErrorHandling(
+      async () => {
+        const updated = await linkApi.updateSublink(linkId, sublinkId, sanitized);
+        const normalized = normalizeLink(updated);
+        set((state) => ({
+          links: state.links.map((link) => (link.id === linkId ? normalized : link))
+        }));
+        return normalized;
+      },
+      (message) => set({ error: message })
+    );
+  },
+  deleteSublink: async (linkId, sublinkId) => {
+    set({ error: null });
+
+    return await withErrorHandling(
+      async () => {
+        const updated = await linkApi.removeSublink(linkId, sublinkId);
+        const normalized = normalizeLink(updated);
+        set((state) => ({
+          links: state.links.map((link) => (link.id === linkId ? normalized : link))
+        }));
+        return normalized;
       },
       (message) => set({ error: message })
     );

@@ -336,6 +336,7 @@ export default function SettingsPage() {
       <LinkFormDialog
         open={isLinkDialogOpen}
         mode={linkDialogMode}
+        linkId={linkDialogMode === "edit" ? editingLink?.id : undefined}
         initialValues={
           linkDialogMode === "edit" && editingLink
             ? {
