@@ -32,6 +32,7 @@ export function LinkFormDialog({
   const [url, setUrl] = useState(initialValues?.url ?? "");
   const [description, setDescription] = useState(initialValues?.description ?? "");
   const [categoryId, setCategoryId] = useState(initialValues?.categoryId ?? categories[0]?.id ?? "");
+  const initialSublinks = initialValues?.sublinks ?? [];
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setSubmitting] = useState(false);
   const [isDeleting, setDeleting] = useState(false);
@@ -78,7 +79,8 @@ export function LinkFormDialog({
         name: trimmedName,
         url: trimmedUrl,
         description: trimmedDescription.length > 0 ? trimmedDescription : null,
-        categoryId
+        categoryId,
+        sublinks: initialSublinks
       });
       onClose();
     } catch (submitError) {

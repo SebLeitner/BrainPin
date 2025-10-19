@@ -342,7 +342,8 @@ export default function SettingsPage() {
                 name: editingLink.name,
                 url: editingLink.url,
                 description: editingLink.description,
-                categoryId: editingLink.categoryId
+                categoryId: editingLink.categoryId,
+                sublinks: editingLink.sublinks
               }
             : undefined
         }

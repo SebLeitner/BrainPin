@@ -37,6 +37,18 @@ locals {
     "GET /links/{linkId}"        = { method = "GET",    path = "/links/{linkId}" }
     "PUT /links/{linkId}"        = { method = "PUT",    path = "/links/{linkId}" }
     "DELETE /links/{linkId}"     = { method = "DELETE", path = "/links/{linkId}" }
+    "POST /links/{linkId}/sublinks" = {
+      method = "POST"
+      path   = "/links/{linkId}/sublinks"
+    }
+    "PUT /links/{linkId}/sublinks/{sublinkId}" = {
+      method = "PUT"
+      path   = "/links/{linkId}/sublinks/{sublinkId}"
+    }
+    "DELETE /links/{linkId}/sublinks/{sublinkId}" = {
+      method = "DELETE"
+      path   = "/links/{linkId}/sublinks/{sublinkId}"
+    }
     "GET /categories"            = { method = "GET",    path = "/categories" }
     "POST /categories"           = { method = "POST",   path = "/categories" }
     "GET /categories/{categoryId}"    = { method = "GET",    path = "/categories/{categoryId}" }
