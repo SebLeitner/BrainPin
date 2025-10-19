@@ -1,13 +1,8 @@
+import type { LinkItem, SublinkItem } from "@/types/links";
+
 const DEFAULT_API_BASE_URL = "https://aw493hkv29.execute-api.eu-central-1.amazonaws.com";
 
 const apiBaseUrl = (process.env.NEXT_PUBLIC_API_ENDPOINT ?? DEFAULT_API_BASE_URL).replace(/\/$/, "");
-
-export type SublinkItem = {
-  id: string;
-  name: string;
-  url: string;
-  description?: string | null;
-};
 
 export type ApiSublinkPayload = Omit<SublinkItem, "id"> & { id?: string };
 
@@ -19,7 +14,12 @@ export type ApiLinkPayload = {
   sublinks: SublinkItem[];
 };
 
-type ApiSublinkResponse = SublinkItem;
+type ApiSublinkResponse = {
+  id: string;
+  name: string;
+  url: string;
+  description?: string | null;
+};
 
 type ApiLinkResponse = {
   id: string;
@@ -117,24 +117,46 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   return (await response.json()) as T;
 };
 
+const normalizeSublink = (sublink: ApiSublinkResponse): SublinkItem => ({
+  id: sublink.id,
+  name: sublink.name,
+  url: sublink.url,
+  description:
+    sublink.description === undefined || sublink.description === null
+      ? null
+      : sublink.description
+});
+
+const normalizeLink = (link: ApiLinkResponse): LinkItem => ({
+  id: link.id,
+  name: link.name,
+  url: link.url,
+  categoryId: link.categoryId,
+  description:
+    link.description === undefined || link.description === null
+      ? null
+      : link.description,
+  sublinks: (link.sublinks ?? []).map(normalizeSublink)
+});
+
 export const linkApi = {
   list: async () => {
     const data = await request<ListLinksResponse>("/links");
-    return data.links;
+    return data.links.map(normalizeLink);
   },
   create: async (payload: ApiLinkPayload) => {
     const data = await request<LinkResponse>("/links", {
       method: "POST",
       body: JSON.stringify(payload)
     });
-    return data.link;
+    return normalizeLink(data.link);
   },
   update: async (linkId: string, payload: Partial<ApiLinkPayload>) => {
     const data = await request<LinkResponse>(`/links/${linkId}`, {
       method: "PUT",
       body: JSON.stringify(payload)
     });
-    return data.link;
+    return normalizeLink(data.link);
   },
   remove: async (linkId: string) => {
     await request<void>(`/links/${linkId}`, { method: "DELETE" });
@@ -144,7 +166,7 @@ export const linkApi = {
       method: "POST",
       body: JSON.stringify(payload)
     });
-    return data.link;
+    return normalizeLink(data.link);
   },
   updateSublink: async (
     linkId: string,
@@ -155,13 +177,13 @@ export const linkApi = {
       method: "PUT",
       body: JSON.stringify(payload)
     });
-    return data.link;
+    return normalizeLink(data.link);
   },
   removeSublink: async (linkId: string, sublinkId: string) => {
     const data = await request<LinkResponse>(`/links/${linkId}/sublinks/${sublinkId}`, {
       method: "DELETE"
     });
-    return data.link;
+    return normalizeLink(data.link);
   }
 };
 
