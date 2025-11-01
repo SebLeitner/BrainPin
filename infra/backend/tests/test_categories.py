@@ -149,21 +149,24 @@ def test_links_require_existing_categories_and_block_category_deletion():
         "body": json.dumps({
             "name": "Example",
             "url": "https://example.org",
-            "categoryId": category_id,
+            "categoryIds": [category_id],
         }),
         "isBase64Encoded": False,
     }
 
     link_response = app.handler(link_event, None)
     assert link_response["statusCode"] == 201
-    link_id = json.loads(link_response["body"])["link"]["id"]
+    link_payload = json.loads(link_response["body"])["link"]
+    link_id = link_payload["id"]
+    assert link_payload["categoryIds"] == [category_id]
+    assert link_payload["categoryId"] == category_id
 
     invalid_link_event = {
         **link_event,
         "body": json.dumps({
             "name": "Bad",
             "url": "https://invalid.example",
-            "categoryId": "cat-missing",
+            "categoryIds": ["cat-missing"],
         }),
     }
 
@@ -174,7 +177,7 @@ def test_links_require_existing_categories_and_block_category_deletion():
         "rawPath": f"/links/{link_id}",
         "pathParameters": {"linkId": link_id},
         "requestContext": {"http": {"method": "PUT"}},
-        "body": json.dumps({"categoryId": "cat-missing"}),
+        "body": json.dumps({"categoryIds": ["cat-missing"]}),
         "isBase64Encoded": False,
     }
 
