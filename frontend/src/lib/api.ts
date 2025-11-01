@@ -9,7 +9,7 @@ export type ApiSublinkPayload = Omit<SublinkItem, "id"> & { id?: string };
 export type ApiLinkPayload = {
   name: string;
   url: string;
-  categoryId: string;
+  categoryIds: string[];
   description?: string | null;
   sublinks: SublinkItem[];
 };
@@ -25,7 +25,7 @@ type ApiLinkResponse = {
   id: string;
   name: string;
   url: string;
-  categoryId: string;
+  categoryIds: string[];
   description?: string | null;
   sublinks: ApiSublinkResponse[];
 };
@@ -127,17 +127,27 @@ const normalizeSublink = (sublink: ApiSublinkResponse): SublinkItem => ({
       : sublink.description
 });
 
-const normalizeLink = (link: ApiLinkResponse): LinkItem => ({
-  id: link.id,
-  name: link.name,
-  url: link.url,
-  categoryId: link.categoryId,
-  description:
-    link.description === undefined || link.description === null
-      ? null
-      : link.description,
-  sublinks: (link.sublinks ?? []).map(normalizeSublink)
-});
+const normalizeLink = (link: ApiLinkResponse): LinkItem => {
+  const sanitizedCategoryIds = Array.isArray(link.categoryIds)
+    ? Array.from(
+        new Set(
+          link.categoryIds.filter((categoryId) => typeof categoryId === "string")
+        )
+      )
+    : [];
+
+  return {
+    id: link.id,
+    name: link.name,
+    url: link.url,
+    categoryIds: sanitizedCategoryIds,
+    description:
+      link.description === undefined || link.description === null
+        ? null
+        : link.description,
+    sublinks: (link.sublinks ?? []).map(normalizeSublink)
+  };
+};
 
 export const linkApi = {
   list: async () => {

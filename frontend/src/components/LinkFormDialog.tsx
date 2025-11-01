@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { PencilSquareIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
+import clsx from "clsx";
 import { shallow } from "zustand/shallow";
 
 import { Modal } from "@/components/Modal";
@@ -15,6 +16,25 @@ const generateSublinkId = () => {
   }
 
   return `sublink-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+};
+
+const deriveInitialCategoryIds = (
+  categories: { id: string }[],
+  source?: readonly string[]
+): string[] => {
+  if (categories.length === 0) {
+    return [];
+  }
+
+  if (source && source.length > 0) {
+    const availableIds = new Set(categories.map((category) => category.id));
+    const filtered = source.filter((categoryId) => availableIds.has(categoryId));
+    if (filtered.length > 0) {
+      return filtered;
+    }
+  }
+
+  return [categories[0].id];
 };
 
 export type LinkFormDialogProps = {
@@ -55,8 +75,8 @@ export function LinkFormDialog({
   const [name, setName] = useState(initialValues?.name ?? "");
   const [url, setUrl] = useState(initialValues?.url ?? "");
   const [description, setDescription] = useState(initialValues?.description ?? "");
-  const [categoryId, setCategoryId] = useState(
-    initialValues?.categoryId ?? categories[0]?.id ?? ""
+  const [categoryIds, setCategoryIds] = useState<string[]>(
+    () => deriveInitialCategoryIds(categories, initialValues?.categoryIds)
   );
   const [sublinks, setSublinks] = useState<SublinkItem[]>(
     (initialValues?.sublinks ?? []).map((sublink) => ({ ...sublink }))
@@ -80,11 +100,30 @@ export function LinkFormDialog({
   const isBusy =
     isSubmitting || isDeleting || isSublinkSubmitting || pendingSublinkId !== null;
 
+  const toggleCategory = (categoryId: string) => {
+    if (isBusy) {
+      return;
+    }
+
+    setCategoryIds((current) => {
+      const nextSelection = new Set(current);
+      if (nextSelection.has(categoryId)) {
+        nextSelection.delete(categoryId);
+      } else {
+        nextSelection.add(categoryId);
+      }
+
+      return categories
+        .filter((category) => nextSelection.has(category.id))
+        .map((category) => category.id);
+    });
+  };
+
   useEffect(() => {
     setName(initialValues?.name ?? "");
     setUrl(initialValues?.url ?? "");
     setDescription(initialValues?.description ?? "");
-    setCategoryId(initialValues?.categoryId ?? categories[0]?.id ?? "");
+    setCategoryIds(deriveInitialCategoryIds(categories, initialValues?.categoryIds));
     setSublinks((initialValues?.sublinks ?? []).map((sublink) => ({ ...sublink })));
     setError(null);
     setSubmitting(false);
@@ -109,12 +148,12 @@ export function LinkFormDialog({
       Boolean(trimmed) &&
       trimmed.length <= 16 &&
       Boolean(url.trim()) &&
-      Boolean(categoryId) &&
+      categoryIds.length > 0 &&
       hasCategories &&
       !isSublinkSubmitting &&
       pendingSublinkId === null
     );
-  }, [name, url, categoryId, hasCategories, isSublinkSubmitting, pendingSublinkId]);
+  }, [name, url, categoryIds, hasCategories, isSublinkSubmitting, pendingSublinkId]);
 
   const handleSubmit = async () => {
     if (isSubmitting || isDeleting || isSublinkSubmitting || pendingSublinkId !== null) {
@@ -157,7 +196,7 @@ export function LinkFormDialog({
         name: trimmedName,
         url: trimmedUrl,
         description: trimmedDescription.length > 0 ? trimmedDescription : null,
-        categoryId,
+        categoryIds,
         sublinks: normalizedSublinks
       });
       onClose();
@@ -383,24 +422,42 @@ export function LinkFormDialog({
             inputMode="url"
           />
         </label>
-        <label className="block text-sm font-medium text-slate-200">
-          Kategorie
-          <select
-            value={categoryId}
-            onChange={(event) => setCategoryId(event.target.value)}
-            disabled={!hasCategories}
-            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 focus:border-brand-400 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        {!hasCategories ? (
-          <p className="text-sm text-amber-300">Bitte lege zuerst eine Kategorie an.</p>
-        ) : null}
+        <div>
+          <p className="text-sm font-medium text-slate-200">Kategorien</p>
+          {hasCategories ? (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {categories.map((category) => {
+                const isSelected = categoryIds.includes(category.id);
+                return (
+                  <label
+                    key={category.id}
+                    className={clsx(
+                      "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition focus-within:outline focus-within:outline-2 focus-within:outline-offset-2",
+                      isSelected
+                        ? "border-brand-400 bg-brand-500/20 text-brand-100 focus-within:outline-brand-300"
+                        : "border-slate-700 bg-slate-950/40 text-slate-300 hover:border-brand-400 hover:text-brand-100 focus-within:outline-brand-300",
+                      isBusy ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={isSelected}
+                      onChange={() => toggleCategory(category.id)}
+                      disabled={isBusy}
+                    />
+                    <span>{category.name}</span>
+                  </label>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-amber-300">Bitte lege zuerst eine Kategorie an.</p>
+          )}
+          {hasCategories && categoryIds.length === 0 ? (
+            <p className="mt-2 text-xs text-amber-300">Wähle mindestens eine Kategorie aus.</p>
+          ) : null}
+        </div>
         <label className="block text-sm font-medium text-slate-200">
           Beschreibung (optional)
           <textarea

@@ -5,7 +5,6 @@ import { shallow } from "zustand/shallow";
 
 import { Modal } from "@/components/Modal";
 import {
-  selectCategoryNameById,
   selectHasSublinksByLinkId,
   selectSublinksByLinkId,
   useLinksStore
@@ -19,10 +18,12 @@ export type LinkTileProps = {
 export function LinkTile({ link }: LinkTileProps) {
   const [isSublinkDialogOpen, setSublinkDialogOpen] = useState(false);
 
-  const categoryName =
-    useLinksStore(
-      useMemo(() => selectCategoryNameById(link.categoryId), [link.categoryId])
-    ) ?? "Unbekannt";
+  const categoryNames = useLinksStore(
+    (state) => state.getCategoryNamesByIds(link.categoryIds),
+    shallow
+  );
+  const categoryLabel =
+    categoryNames.length > 0 ? categoryNames.join(" · ") : "Unbekannt";
 
   const sublinks = useLinksStore(
     useMemo(() => selectSublinksByLinkId(link.id), [link.id]),
@@ -52,7 +53,7 @@ export function LinkTile({ link }: LinkTileProps) {
         className="flex flex-1 flex-col justify-between text-left"
       >
         <div>
-          <p className="text-xs uppercase tracking-wide text-brand-300">{categoryName}</p>
+          <p className="text-xs uppercase tracking-wide text-brand-300">{categoryLabel}</p>
           <h3 className="mt-1 text-lg font-semibold text-slate-100" title={link.name}>
             {link.name}
           </h3>
