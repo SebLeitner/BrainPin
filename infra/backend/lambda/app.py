@@ -224,12 +224,33 @@ def _extract_sublinks(item: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 
 def _serialize(item: Dict[str, Any]) -> Dict[str, Any]:
+    raw_category_ids = item.get("category_ids")
+    category_ids: List[str] = []
+
+    if isinstance(raw_category_ids, list):
+        seen: set[str] = set()
+        for candidate in raw_category_ids:
+            if not isinstance(candidate, str):
+                continue
+            trimmed = candidate.strip()
+            if trimmed and trimmed not in seen:
+                category_ids.append(trimmed)
+                seen.add(trimmed)
+
+    legacy_category_id = item.get("category_id")
+    if isinstance(legacy_category_id, str):
+        trimmed = legacy_category_id.strip()
+        if trimmed and trimmed not in category_ids:
+            category_ids.insert(0, trimmed)
+
     payload: Dict[str, Any] = {
         "id": item["link_id"],
         "name": item["name"],
         "url": item["url"],
-        "categoryId": item["category_id"],
+        "categoryIds": category_ids,
     }
+    if category_ids:
+        payload["categoryId"] = category_ids[0]
     if "description" in item:
         payload["description"] = item["description"]
     payload["sublinks"] = _extract_sublinks(item)
@@ -298,7 +319,8 @@ def _category_has_links(category_id: str) -> bool:
     start_key = None
     while True:
         scan_kwargs: Dict[str, Any] = {
-            "FilterExpression": Attr("category_id").eq(category_id),
+            "FilterExpression": Attr("category_ids").contains(category_id)
+            | Attr("category_id").eq(category_id),
             "ProjectionExpression": "link_id",
         }
         if start_key:
@@ -419,22 +441,61 @@ def _delete_category(category_id: str) -> Dict[str, Any]:
     return response(204, None)
 
 
+def _sanitize_category_ids(value: Any, *, field: str) -> List[str]:
+    if value is None:
+        raise HttpError(400, f"'{field}' must contain at least one category identifier")
+
+    if isinstance(value, list):
+        raw_items = value
+    elif isinstance(value, str):
+        raw_items = [value]
+    else:
+        raise HttpError(400, f"'{field}' must be a list of category identifiers")
+
+    sanitized: List[str] = []
+    seen: set[str] = set()
+    for index, candidate in enumerate(raw_items):
+        label = f"{field}[{index}]" if isinstance(value, list) else field
+        category_id = _validate_string(candidate, label, max_length=64)
+        if category_id not in seen:
+            sanitized.append(category_id)
+            seen.add(category_id)
+
+    if not sanitized:
+        raise HttpError(400, f"'{field}' must contain at least one category identifier")
+
+    return sanitized
+
+
+def _extract_category_ids_from_body(event_body: Dict[str, Any]) -> List[str]:
+    if "categoryIds" in event_body:
+        category_ids = _sanitize_category_ids(event_body.get("categoryIds"), field="categoryIds")
+    elif "categoryId" in event_body:
+        category_ids = _sanitize_category_ids(event_body.get("categoryId"), field="categoryId")
+    else:
+        raise HttpError(400, "At least one category must be provided")
+
+    for category_id in category_ids:
+        _assert_category_exists(category_id)
+
+    return category_ids
+
+
 def _create_link(event_body: Dict[str, Any]) -> Dict[str, Any]:
     name = _validate_string(event_body.get("name"), "name", max_length=128)
     url = _validate_url(event_body.get("url"))
-    category_id = _validate_string(event_body.get("categoryId"), "categoryId", max_length=64)
+    category_ids = _extract_category_ids_from_body(event_body)
     description = _validate_description(event_body.get("description"))
     raw_sublinks = event_body.get("sublinks")
     sublinks = _validate_sublinks(raw_sublinks) if raw_sublinks is not None else []
-
-    _assert_category_exists(category_id)
 
     link_id = _generate_link_id()
     item: Dict[str, Any] = {
         "link_id": link_id,
         "name": name,
         "url": url,
-        "category_id": category_id,
+        "category_id": category_ids[0],
+        "category_ids": category_ids,
     }
     if description is not None:
         item["description"] = description
@@ -489,11 +550,20 @@ def _update_link(link_id: str, event_body: Dict[str, Any]) -> Dict[str, Any]:
         values[":u"] = url
         set_statements.append("#u = :u")
 
-    if "categoryId" in event_body:
-        category_id = _validate_string(event_body["categoryId"], "categoryId", max_length=64)
-        _assert_category_exists(category_id)
+    category_ids_to_set: Optional[List[str]] = None
+    if "categoryIds" in event_body:
+        category_ids_to_set = _sanitize_category_ids(event_body.get("categoryIds"), field="categoryIds")
+    elif "categoryId" in event_body:
+        category_ids_to_set = _sanitize_category_ids(event_body.get("categoryId"), field="categoryId")
+
+    if category_ids_to_set is not None:
+        for category_id in category_ids_to_set:
+            _assert_category_exists(category_id)
+        names["#ci"] = "category_ids"
+        values[":ci"] = category_ids_to_set
+        set_statements.append("#ci = :ci")
         names["#c"] = "category_id"
-        values[":c"] = category_id
+        values[":c"] = category_ids_to_set[0]
         set_statements.append("#c = :c")
 
     if "description" in event_body:
