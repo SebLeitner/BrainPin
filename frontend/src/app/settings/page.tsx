@@ -73,7 +73,9 @@ export default function SettingsPage() {
 
   const linksPerCategory = useMemo(() => {
     return links.reduce<Record<string, number>>((acc, link) => {
-      acc[link.categoryId] = (acc[link.categoryId] ?? 0) + 1;
+      link.categoryIds.forEach((categoryId) => {
+        acc[categoryId] = (acc[categoryId] ?? 0) + 1;
+      });
       return acc;
     }, {});
   }, [links]);
@@ -379,32 +381,39 @@ export default function SettingsPage() {
         </div>
         <div className="space-y-3">
           {links.length > 0 ? (
-            links.map((link) => (
-              <div
-                key={link.id}
-                className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-4"
-              >
-                <div className="space-y-2">
-                  <p className="text-xs uppercase tracking-wide text-brand-300">
-                    {categoryNameById[link.categoryId] ?? "Unbekannt"}
-                  </p>
-                  <p className="text-base font-semibold text-slate-100">{link.name}</p>
-                  {link.description ? <p className="text-sm text-slate-300">{link.description}</p> : null}
-                  <a
-                    href={link.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="break-all text-sm text-brand-200 transition hover:text-brand-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300"
-                  >
-                    {link.url}
-                  </a>
-                </div>
+            links.map((link) => {
+              const categoryNames = link.categoryIds
+                .map((categoryId) => categoryNameById[categoryId])
+                .filter((name): name is string => Boolean(name));
+              const categoryLabel =
+                categoryNames.length > 0 ? categoryNames.join(" · ") : "Unbekannt";
 
-                <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-sm font-semibold text-slate-200">
-                      Sublinks ({link.sublinks.length})
-                    </p>
+              return (
+                <div
+                  key={link.id}
+                  className="flex flex-col gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-4"
+                >
+                  <div className="space-y-2">
+                    <p className="text-xs uppercase tracking-wide text-brand-300">{categoryLabel}</p>
+                    <p className="text-base font-semibold text-slate-100">{link.name}</p>
+                    {link.description ? (
+                      <p className="text-sm text-slate-300">{link.description}</p>
+                    ) : null}
+                    <a
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="break-all text-sm text-brand-200 transition hover:text-brand-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300"
+                    >
+                      {link.url}
+                    </a>
+                  </div>
+
+                  <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-sm font-semibold text-slate-200">
+                        Sublinks ({link.sublinks.length})
+                      </p>
                     <button
                       type="button"
                       onClick={() => openCreateSublink(link)}
@@ -471,12 +480,12 @@ export default function SettingsPage() {
                   ) : null}
                 </div>
 
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => openEditLink(link)}
-                    className="inline-flex items-center gap-2 rounded-full border border-slate-700 px-3 py-1 text-xs text-slate-300 transition hover:border-brand-500 hover:text-brand-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300"
-                  >
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openEditLink(link)}
+                      className="inline-flex items-center gap-2 rounded-full border border-slate-700 px-3 py-1 text-xs text-slate-300 transition hover:border-brand-500 hover:text-brand-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300"
+                    >
                     <PencilSquareIcon className="h-4 w-4" /> Link bearbeiten
                   </button>
                   <button
@@ -494,9 +503,10 @@ export default function SettingsPage() {
                   >
                     <TrashIcon className="h-4 w-4" /> Link löschen
                   </button>
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           ) : (
             <p className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/60 p-6 text-sm text-slate-400">
               Noch keine Links vorhanden. Lege Links an oder importiere sie später.
@@ -511,7 +521,7 @@ export default function SettingsPage() {
           <p>• Verwende sprechende Kurz-Namen (≤16 Zeichen), damit deine Kacheln auch auf kleinen Bildschirmen lesbar bleiben.</p>
           <p>• Ziehe mobile Nutzer:innen in Betracht – Buttons und Kacheln sind bereits responsiv gestaltet.</p>
           <p>
-            • Plane Kategorien so, dass jeder Link eindeutig zugeordnet werden kann. Doppelte Kategorien lassen sich jederzeit hier entfernen.
+            • Plane Kategorien so, dass Links bei Bedarf mehreren Bereichen zugeordnet werden können. Doppelte Kategorien lassen sich jederzeit hier entfernen.
           </p>
         </div>
       </section>
@@ -538,7 +548,7 @@ export default function SettingsPage() {
                 name: editingLink.name,
                 url: editingLink.url,
                 description: editingLink.description,
-                categoryId: editingLink.categoryId,
+                categoryIds: [...editingLink.categoryIds],
                 sublinks: editingLink.sublinks
               }
             : undefined

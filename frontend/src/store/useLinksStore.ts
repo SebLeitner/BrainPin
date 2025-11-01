@@ -21,6 +21,7 @@ type StoreState = {
   error: string | null;
   getFilteredLinks: () => LinkItem[];
   getCategoryNameById: (categoryId: string) => string | undefined;
+  getCategoryNamesByIds: (categoryIds: readonly string[]) => string[];
   getSublinksByLinkId: (linkId: string) => SublinkItem[];
   setActiveCategory: (categoryId: string | null) => void;
   clearError: () => void;
@@ -52,7 +53,8 @@ const filteredLinks = (state: Pick<StoreState, "links" | "activeCategoryId">) =>
     return state.links;
   }
 
-  return state.links.filter((link) => link.categoryId === state.activeCategoryId);
+  const activeCategoryId = state.activeCategoryId as string;
+  return state.links.filter((link) => link.categoryIds.includes(activeCategoryId));
 };
 
 const sanitizeSublinks = (sublinks?: SublinkItem[]): SublinkItem[] => {
@@ -156,16 +158,32 @@ const normalizeLink = (link: LinkItem): LinkItem => {
   const sanitizedSublinks = sanitizeSublinks(link.sublinks);
   return {
     ...link,
+    categoryIds: [...link.categoryIds],
     sublinks: sanitizedSublinks.map((sublink) => ({ ...sublink }))
   };
 };
 
 const cloneLink = (link: LinkItem): LinkItem => ({
   ...link,
+  categoryIds: [...link.categoryIds],
   sublinks: link.sublinks.map((sublink) => ({ ...sublink }))
 });
 
 const EMPTY_SUBLINKS: SublinkItem[] = [];
+
+const sanitizeCategoryIds = (categoryIds: readonly string[]): string[] => {
+  const normalizedIds = categoryIds
+    .map((categoryId) => (typeof categoryId === "string" ? categoryId.trim() : ""))
+    .filter((categoryId) => categoryId.length > 0);
+
+  const uniqueIds = Array.from(new Set(normalizedIds));
+
+  if (uniqueIds.length === 0) {
+    throw new Error("Mindestens eine Kategorie auswählen.");
+  }
+
+  return uniqueIds;
+};
 
 const sanitizePayload = (payload: Omit<LinkItem, "id">): ApiLinkPayload => {
   const trimmedName = payload.name.trim();
@@ -196,7 +214,7 @@ const sanitizePayload = (payload: Omit<LinkItem, "id">): ApiLinkPayload => {
   return {
     name: trimmedName,
     url: trimmedUrl,
-    categoryId: payload.categoryId,
+    categoryIds: sanitizeCategoryIds(payload.categoryIds),
     description,
     sublinks: sanitizeSublinks(payload.sublinks)
   };
@@ -226,8 +244,8 @@ const sanitizeUpdatePayload = (
     result.url = trimmed;
   }
 
-  if (payload.categoryId !== undefined) {
-    result.categoryId = payload.categoryId;
+  if (payload.categoryIds !== undefined) {
+    result.categoryIds = sanitizeCategoryIds(payload.categoryIds);
   }
 
   if (payload.description !== undefined) {
@@ -268,6 +286,19 @@ export const useLinksStore = create<StoreState>((set, get) => ({
     get()
       .categories.find((category) => category.id === categoryId)
       ?.name,
+  getCategoryNamesByIds: (categoryIds) => {
+    const categoryMap = new Map(
+      get().categories.map((category) => [category.id, category.name] as const)
+    );
+
+    return categoryIds.reduce<string[]>((accumulator, categoryId) => {
+      const name = categoryMap.get(categoryId);
+      if (name) {
+        accumulator.push(name);
+      }
+      return accumulator;
+    }, []);
+  },
   getSublinksByLinkId: (linkId) => {
     const link = get().links.find((item) => item.id === linkId);
     return link ? link.sublinks.map((sublink) => ({ ...sublink })) : [];

@@ -15,7 +15,7 @@ export type LinkItem = {
   id: string;
   name: string;
   url: string;
-  categoryId: string;
+  categoryIds: string[];
   description?: string | null;
   sublinks: SublinkItem[];
 };

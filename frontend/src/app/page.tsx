@@ -27,7 +27,7 @@ export default function HomePage() {
     if (!activeCategoryId || activeCategoryId === "all") {
       return links;
     }
-    return links.filter((link) => link.categoryId === activeCategoryId);
+    return links.filter((link) => link.categoryIds.includes(activeCategoryId));
   }, [links, activeCategoryId]);
 
   const filteredLinks = useMemo(() => {
