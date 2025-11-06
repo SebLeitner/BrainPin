@@ -123,8 +123,34 @@ def _validate_string(value: Any, field: str, *, max_length: int, allow_empty: bo
     return trimmed
 
 
+def _normalize_phone_number(raw: str, field: str) -> str:
+    digits = re.sub(r"[\s().-]", "", raw)
+    if digits == "":
+        raise HttpError(400, f"'{field}' cannot be empty")
+
+    plus_count = digits.count("+")
+    if plus_count > 1:
+        raise HttpError(400, f"'{field}' contains too many '+' characters")
+
+    if plus_count == 1 and not digits.startswith("+"):
+        raise HttpError(400, f"'{field}' must start with '+' if it contains one")
+
+    number = digits[1:] if digits.startswith("+") else digits
+    if not number.isdigit():
+        raise HttpError(400, f"'{field}' may only contain digits aside from a leading '+'")
+
+    return f"+{number}" if digits.startswith("+") else number
+
+
 def _validate_url(url: Any, field: str = "url") -> str:
     trimmed = _validate_string(url, field, max_length=2048)
+    lower_trimmed = trimmed.lower()
+
+    if lower_trimmed.startswith("tel:"):
+        phone = trimmed[4:]
+        normalized = _normalize_phone_number(phone, field)
+        return f"tel:{normalized}"
+
     if not re.match(r"^https?://", trimmed):
         raise HttpError(400, f"'{field}' must start with http:// or https://")
     return trimmed

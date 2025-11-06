@@ -44,6 +44,8 @@ export function SublinkFormDialog({
   const [linkType, setLinkType] = useState<"url" | "phone">(() =>
     isTelephoneUrl(initialValues.url) ? "phone" : "url"
   );
+  const [requiresPhoneConfirmation, setRequiresPhoneConfirmation] = useState(false);
+  const [phoneNormalizationNotice, setPhoneNormalizationNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) {
@@ -56,6 +58,8 @@ export function SublinkFormDialog({
     setDescription(initialValues.description);
     setLinkType(isTelephoneUrl(initialValues.url) ? "phone" : "url");
     setError(null);
+    setRequiresPhoneConfirmation(false);
+    setPhoneNormalizationNotice(null);
   }, [initialValues, open]);
 
   const canSubmit = useMemo(() => {
@@ -69,6 +73,8 @@ export function SublinkFormDialog({
     }
 
     setLinkType(nextType);
+    setRequiresPhoneConfirmation(false);
+    setPhoneNormalizationNotice(null);
   };
 
   const handleSubmit = async () => {
@@ -101,6 +107,20 @@ export function SublinkFormDialog({
     if (linkType === "phone") {
       try {
         const sanitized = sanitizePhoneNumber(trimmedValue);
+        if (sanitized !== trimmedValue) {
+          setPhoneValue(sanitized);
+          setRequiresPhoneConfirmation(true);
+          setPhoneNormalizationNotice(
+            "Die Telefonnummer wurde automatisch formatiert. Bitte prüfe sie und speichere erneut, um die Änderung zu übernehmen."
+          );
+          return;
+        }
+
+        if (requiresPhoneConfirmation) {
+          setRequiresPhoneConfirmation(false);
+        }
+
+        setPhoneNormalizationNotice(null);
         finalUrl = `tel:${sanitized}`;
       } catch (phoneError) {
         const message =
@@ -118,6 +138,7 @@ export function SublinkFormDialog({
         url: finalUrl,
         description: description.trim()
       });
+      setPhoneNormalizationNotice(null);
     } catch (submitError) {
       const message =
         submitError instanceof Error
@@ -210,6 +231,8 @@ export function SublinkFormDialog({
             onChange={(event) => {
               if (linkType === "phone") {
                 setPhoneValue(event.target.value);
+                setRequiresPhoneConfirmation(false);
+                setPhoneNormalizationNotice(null);
               } else {
                 setUrlValue(event.target.value);
               }
@@ -219,6 +242,9 @@ export function SublinkFormDialog({
             inputMode={linkType === "phone" ? "tel" : "url"}
           />
         </label>
+        {linkType === "phone" && phoneNormalizationNotice ? (
+          <p className="text-xs text-amber-300">{phoneNormalizationNotice}</p>
+        ) : null}
         {!allowPhoneType && linkType !== "phone" ? (
           <p className="text-xs text-slate-400">
             Es kann nur eine Telefonnummer hinterlegt werden.
