@@ -20,50 +20,36 @@ env:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    concurrency:
-      group: frontend-deploy
-      cancel-in-progress: true
 
     steps:
-      - name: 🧩 Checkout repository
+      - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: ⚙️ Setup Node.js 20
+      - name: Use Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          # 👇 kein cache-Parameter! Der ist jetzt komplett entfernt.
 
-      - name: 📦 Install dependencies
+      - name: Install dependencies
         working-directory: frontend
-        run: npm ci
+        run: npm install
 
-      - name: 🏗️ Build static site
+      - name: Build static site
         working-directory: frontend
         run: npm run build:static
 
-      - name: 🔐 Configure AWS credentials
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: 🚀 Upload static assets to S3 (immutable)
+      - name: Sync assets to S3
         run: |
-          aws s3 sync frontend/out "s3://${{ env.S3_BUCKET }}" \
-            --delete \
-            --cache-control max-age=31536000,public \
-            --exclude 'index.html'
+          aws s3 sync frontend/out "s3://${{ env.S3_BUCKET }}" --delete --cache-control max-age=31536000,public --exclude 'index.html'
+          aws s3 cp frontend/out/index.html "s3://${{ env.S3_BUCKET }}/index.html" --cache-control max-age=60
 
-      - name: 🧾 Upload index.html (non-cached)
+      - name: Invalidate CloudFront cache
         run: |
-          aws s3 cp frontend/out/index.html "s3://${{ env.S3_BUCKET }}/index.html" \
-            --cache-control no-cache,public \
-            --content-type text/html
-
-      - name: 🔄 Invalidate CloudFront cache
-        run: |
-          aws cloudfront create-invalidation \
-            --distribution-id "${{ env.CLOUDFRONT_DISTRIBUTION_ID }}" \
-            --paths '/*'
+          aws cloudfront create-invalidation --distribution-id "${{ env.CLOUDFRONT_DISTRIBUTION_ID }}" --paths '/*'
