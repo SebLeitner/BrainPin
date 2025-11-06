@@ -3,6 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { Modal } from "@/components/Modal";
+import {
+  extractPhoneNumber,
+  isTelephoneUrl,
+  sanitizePhoneNumber
+} from "@/lib/sublinks";
 
 export type SublinkFormValues = {
   name: string;
@@ -17,6 +22,7 @@ export type SublinkFormDialogProps = {
   onSubmit: (values: SublinkFormValues) => Promise<void>;
   onClose: () => void;
   isSubmitting: boolean;
+  allowPhoneType: boolean;
 };
 
 export function SublinkFormDialog({
@@ -25,12 +31,19 @@ export function SublinkFormDialog({
   initialValues,
   onSubmit,
   onClose,
-  isSubmitting
+  isSubmitting,
+  allowPhoneType
 }: SublinkFormDialogProps) {
   const [name, setName] = useState(initialValues.name);
-  const [url, setUrl] = useState(initialValues.url);
+  const [urlValue, setUrlValue] = useState(initialValues.url);
+  const [phoneValue, setPhoneValue] = useState(() =>
+    extractPhoneNumber(initialValues.url)
+  );
   const [description, setDescription] = useState(initialValues.description);
   const [error, setError] = useState<string | null>(null);
+  const [linkType, setLinkType] = useState<"url" | "phone">(() =>
+    isTelephoneUrl(initialValues.url) ? "phone" : "url"
+  );
 
   useEffect(() => {
     if (!open) {
@@ -38,14 +51,25 @@ export function SublinkFormDialog({
     }
 
     setName(initialValues.name);
-    setUrl(initialValues.url);
+    setUrlValue(initialValues.url);
+    setPhoneValue(extractPhoneNumber(initialValues.url));
     setDescription(initialValues.description);
+    setLinkType(isTelephoneUrl(initialValues.url) ? "phone" : "url");
     setError(null);
   }, [initialValues, open]);
 
   const canSubmit = useMemo(() => {
-    return Boolean(name.trim()) && Boolean(url.trim());
-  }, [name, url]);
+    const currentValue = linkType === "phone" ? phoneValue : urlValue;
+    return Boolean(name.trim()) && Boolean(currentValue.trim());
+  }, [linkType, name, phoneValue, urlValue]);
+
+  const handleTypeChange = (nextType: "url" | "phone") => {
+    if (nextType === "phone" && !allowPhoneType && linkType !== "phone") {
+      return;
+    }
+
+    setLinkType(nextType);
+  };
 
   const handleSubmit = async () => {
     if (isSubmitting) {
@@ -53,24 +77,45 @@ export function SublinkFormDialog({
     }
 
     const trimmedName = name.trim();
-    const trimmedUrl = url.trim();
+    const currentValue = linkType === "phone" ? phoneValue : urlValue;
+    const trimmedValue = currentValue.trim();
 
     if (!trimmedName) {
       setError("Name darf nicht leer sein.");
       return;
     }
 
-    if (!trimmedUrl) {
-      setError("Bitte gib eine URL an.");
+    if (!trimmedValue) {
+      setError(
+        linkType === "phone"
+          ? "Bitte gib eine Telefonnummer an."
+          : "Bitte gib eine URL an."
+      );
       return;
     }
 
     setError(null);
 
+    let finalUrl = trimmedValue;
+
+    if (linkType === "phone") {
+      try {
+        const sanitized = sanitizePhoneNumber(trimmedValue);
+        finalUrl = `tel:${sanitized}`;
+      } catch (phoneError) {
+        const message =
+          phoneError instanceof Error
+            ? phoneError.message
+            : "Ungültige Telefonnummer.";
+        setError(message);
+        return;
+      }
+    }
+
     try {
       await onSubmit({
         name: trimmedName,
-        url: trimmedUrl,
+        url: finalUrl,
         description: description.trim()
       });
     } catch (submitError) {
@@ -110,6 +155,45 @@ export function SublinkFormDialog({
       }
     >
       <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-medium text-slate-200">Typ</span>
+          <div className="inline-flex items-center gap-2">
+            <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-200">
+              <input
+                type="radio"
+                name="sublink-type"
+                value="url"
+                checked={linkType === "url"}
+                onChange={() => handleTypeChange("url")}
+                className="h-3 w-3"
+              />
+              Weblink
+            </label>
+            <label
+              className="inline-flex items-center gap-2 text-xs font-medium"
+              aria-disabled={!allowPhoneType && linkType !== "phone"}
+            >
+              <input
+                type="radio"
+                name="sublink-type"
+                value="phone"
+                checked={linkType === "phone"}
+                onChange={() => handleTypeChange("phone")}
+                className="h-3 w-3"
+                disabled={!allowPhoneType && linkType !== "phone"}
+              />
+              <span
+                className={
+                  !allowPhoneType && linkType !== "phone"
+                    ? "text-xs font-medium text-slate-500"
+                    : "text-xs font-medium text-slate-200"
+                }
+              >
+                Telefonnummer
+              </span>
+            </label>
+          </div>
+        </div>
         <label className="block text-sm font-medium text-slate-200">
           Name
           <input
@@ -120,15 +204,26 @@ export function SublinkFormDialog({
           />
         </label>
         <label className="block text-sm font-medium text-slate-200">
-          URL
+          {linkType === "phone" ? "Telefonnummer" : "URL"}
           <input
-            value={url}
-            onChange={(event) => setUrl(event.target.value)}
+            value={linkType === "phone" ? phoneValue : urlValue}
+            onChange={(event) => {
+              if (linkType === "phone") {
+                setPhoneValue(event.target.value);
+              } else {
+                setUrlValue(event.target.value);
+              }
+            }}
             className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 focus:border-brand-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300"
-            placeholder="https://"
-            inputMode="url"
+            placeholder={linkType === "phone" ? "+49 123 456789" : "https://"}
+            inputMode={linkType === "phone" ? "tel" : "url"}
           />
         </label>
+        {!allowPhoneType && linkType !== "phone" ? (
+          <p className="text-xs text-slate-400">
+            Es kann nur eine Telefonnummer hinterlegt werden.
+          </p>
+        ) : null}
         <label className="block text-sm font-medium text-slate-200">
           Beschreibung (optional)
           <textarea

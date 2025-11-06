@@ -8,6 +8,7 @@ import { shallow } from "zustand/shallow";
 import { Modal } from "@/components/Modal";
 import { SublinkFormDialog, type SublinkFormValues } from "@/components/SublinkFormDialog";
 import { useLinksStore } from "@/store/useLinksStore";
+import { extractPhoneNumber, isTelephoneUrl } from "@/lib/sublinks";
 import type { LinkItem, SublinkItem } from "@/types/links";
 
 const generateSublinkId = () => {
@@ -95,6 +96,19 @@ export function LinkFormDialog({
   const [isSublinkSubmitting, setSublinkSubmitting] = useState(false);
   const [pendingSublinkId, setPendingSublinkId] = useState<string | null>(null);
   const [sublinkListError, setSublinkListError] = useState<string | null>(null);
+  const activeSublink = useMemo(() => {
+    if (!activeSublinkId) {
+      return null;
+    }
+
+    return sublinks.find((item) => item.id === activeSublinkId) ?? null;
+  }, [activeSublinkId, sublinks]);
+  const hasPhoneSublink = useMemo(
+    () => sublinks.some((item) => isTelephoneUrl(item.url)),
+    [sublinks]
+  );
+  const allowPhoneType =
+    !hasPhoneSublink || (activeSublink ? isTelephoneUrl(activeSublink.url) : false);
 
   const hasCategories = categories.length > 0;
   const isBusy =
@@ -272,6 +286,14 @@ export function LinkFormDialog({
     const trimmedUrl = values.url.trim();
     const trimmedDescription = values.description.trim();
     const descriptionValue = trimmedDescription.length > 0 ? trimmedDescription : null;
+    const isPhone = isTelephoneUrl(trimmedUrl);
+    const existingPhone = sublinks.find((item) => isTelephoneUrl(item.url));
+    const editedSublinkId =
+      sublinkDialogMode === "edit" && activeSublinkId ? activeSublinkId : null;
+
+    if (isPhone && existingPhone && existingPhone.id !== editedSublinkId) {
+      throw new Error("Es kann nur eine Telefonnummer hinterlegt werden.");
+    }
 
     if (mode === "edit" && linkId) {
       setSublinkSubmitting(true);
@@ -496,11 +518,17 @@ export function LinkFormDialog({
                       ) : null}
                       <a
                         href={sublink.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        target={isTelephoneUrl(sublink.url) ? undefined : "_blank"}
+                        rel={
+                          isTelephoneUrl(sublink.url)
+                            ? undefined
+                            : "noopener noreferrer"
+                        }
                         className="break-all text-xs text-brand-200 hover:text-brand-100"
                       >
-                        {sublink.url}
+                        {isTelephoneUrl(sublink.url)
+                          ? extractPhoneNumber(sublink.url)
+                          : sublink.url}
                       </a>
                     </div>
                     <div className="flex items-center gap-2">
@@ -542,6 +570,7 @@ export function LinkFormDialog({
         onSubmit={handleSublinkSubmit}
         onClose={closeSublinkDialog}
         isSubmitting={isSublinkSubmitting}
+        allowPhoneType={allowPhoneType}
       />
     </Modal>
   );
