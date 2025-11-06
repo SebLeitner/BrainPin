@@ -58,6 +58,19 @@ export default function SettingsPage() {
   const [linkDialogMode, setLinkDialogMode] = useState<"create" | "edit">("create");
   const [editingLink, setEditingLink] = useState<LinkItem | null>(null);
 
+  const [linkSearchTerm, setLinkSearchTerm] = useState("");
+  const [linkCategoryFilter, setLinkCategoryFilter] = useState<string>("all");
+
+  useEffect(() => {
+    if (linkCategoryFilter === "all") {
+      return;
+    }
+
+    if (!categories.some((category) => category.id === linkCategoryFilter)) {
+      setLinkCategoryFilter("all");
+    }
+  }, [categories, linkCategoryFilter]);
+
   const [isSublinkDialogOpen, setSublinkDialogOpen] = useState(false);
   const [sublinkDialogMode, setSublinkDialogMode] = useState<"create" | "edit">("create");
   const [activeLinkForSublink, setActiveLinkForSublink] = useState<LinkItem | null>(null);
@@ -124,6 +137,43 @@ export default function SettingsPage() {
       return acc;
     }, {});
   }, [allCategories]);
+
+  const filteredLinks = useMemo(() => {
+    const trimmedSearch = linkSearchTerm.trim().toLowerCase();
+    const hasSearch = trimmedSearch.length > 0;
+    const activeCategory = linkCategoryFilter;
+
+    return links.filter((link) => {
+      const matchesCategory =
+        activeCategory === "all" || link.categoryIds.includes(activeCategory);
+
+      if (!matchesCategory) {
+        return false;
+      }
+
+      if (!hasSearch) {
+        return true;
+      }
+
+      const searchTargets: string[] = [
+        link.name,
+        link.description ?? "",
+        link.url,
+        ...link.sublinks.flatMap((sublink) => [
+          sublink.name,
+          sublink.description ?? "",
+          sublink.url
+        ])
+      ];
+
+      return searchTargets.some((target) =>
+        target.toLowerCase().includes(trimmedSearch)
+      );
+    });
+  }, [linkCategoryFilter, linkSearchTerm, links]);
+
+  const isFilterApplied =
+    linkCategoryFilter !== "all" || linkSearchTerm.trim().length > 0;
 
   const openCreateCategory = () => {
     setCategoryDialogMode("create");
@@ -417,9 +467,57 @@ export default function SettingsPage() {
             <PlusIcon className="h-4 w-4" /> Link
           </button>
         </div>
+        <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+            <label className="flex flex-col gap-1 text-xs font-medium uppercase tracking-wide text-slate-300">
+              Suchbegriff
+              <input
+                value={linkSearchTerm}
+                onChange={(event) => setLinkSearchTerm(event.target.value)}
+                type="search"
+                placeholder="z. B. Name, URL oder Beschreibung"
+                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm normal-case text-slate-100 focus:border-brand-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-medium uppercase tracking-wide text-slate-300">
+              Kategorie
+              <select
+                value={linkCategoryFilter}
+                onChange={(event) => setLinkCategoryFilter(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm normal-case text-slate-100 focus:border-brand-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300"
+              >
+                <option value="all">Alle Kategorien</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {isFilterApplied ? (
+            <div className="mt-3 flex flex-col gap-2 text-xs text-slate-400 sm:flex-row sm:items-center sm:justify-between">
+              <p>
+                {filteredLinks.length === 1
+                  ? "1 Link entspricht den aktuellen Filtern."
+                  : `${filteredLinks.length} Links entsprechen den aktuellen Filtern.`}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setLinkSearchTerm("");
+                  setLinkCategoryFilter("all");
+                }}
+                className="self-start rounded-full border border-slate-700 px-3 py-1 text-xs text-slate-300 transition hover:border-brand-400 hover:text-brand-200"
+              >
+                Filter zurücksetzen
+              </button>
+            </div>
+          ) : null}
+        </div>
         <div className="space-y-3">
-          {links.length > 0 ? (
-            links.map((link) => {
+          {filteredLinks.length > 0 ? (
+            filteredLinks.map((link) => {
               const categoryNames = link.categoryIds
                 .map((categoryId) => categoryNameById[categoryId])
                 .filter((name): name is string => Boolean(name));
@@ -452,15 +550,15 @@ export default function SettingsPage() {
                       <p className="text-sm font-semibold text-slate-200">
                         Sublinks ({link.sublinks.length})
                       </p>
-                    <button
-                      type="button"
-                      onClick={() => openCreateSublink(link)}
-                      disabled={isSublinkSubmitting || pendingSublinkId !== null}
-                      className="inline-flex items-center gap-2 self-start rounded-full border border-dashed border-brand-400 px-3 py-1 text-xs font-medium text-brand-200 transition hover:border-brand-200 hover:text-brand-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <PlusIcon className="h-4 w-4" /> Sublink hinzufügen
-                    </button>
-                  </div>
+                      <button
+                        type="button"
+                        onClick={() => openCreateSublink(link)}
+                        disabled={isSublinkSubmitting || pendingSublinkId !== null}
+                        className="inline-flex items-center gap-2 self-start rounded-full border border-dashed border-brand-400 px-3 py-1 text-xs font-medium text-brand-200 transition hover:border-brand-200 hover:text-brand-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-300 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <PlusIcon className="h-4 w-4" /> Sublink hinzufügen
+                      </button>
+                    </div>
                   {link.sublinks.length > 0 ? (
                     <ul className="space-y-2">
                       {link.sublinks.map((sublink) => (
@@ -547,7 +645,9 @@ export default function SettingsPage() {
             })
           ) : (
             <p className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/60 p-6 text-sm text-slate-400">
-              Noch keine Links vorhanden. Lege Links an oder importiere sie später.
+              {isFilterApplied
+                ? "Keine Links gefunden. Passe die Filter an oder lege einen neuen Link an."
+                : "Noch keine Links vorhanden. Lege Links an oder importiere sie später."}
             </p>
           )}
         </div>
