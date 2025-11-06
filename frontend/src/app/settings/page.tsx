@@ -7,6 +7,7 @@ import { CategoryFormDialog } from "@/components/CategoryFormDialog";
 import { LinkFormDialog } from "@/components/LinkFormDialog";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { SublinkFormDialog, type SublinkFormValues } from "@/components/SublinkFormDialog";
+import { isTelephoneUrl } from "@/lib/sublinks";
 import { useLinksStore } from "@/store/useLinksStore";
 import type { LinkItem, SublinkItem } from "@/types/links";
 
@@ -70,6 +71,43 @@ export default function SettingsPage() {
   const [pendingSublinkId, setPendingSublinkId] = useState<string | null>(null);
   const [sublinkListError, setSublinkListError] = useState<string | null>(null);
   const [sublinkErrorLinkId, setSublinkErrorLinkId] = useState<string | null>(null);
+
+  const activeLinkSnapshot = useMemo(() => {
+    if (!activeLinkForSublink) {
+      return null;
+    }
+
+    return (
+      links.find((link) => link.id === activeLinkForSublink.id) ??
+      activeLinkForSublink
+    );
+  }, [activeLinkForSublink, links]);
+
+  const activeSublink = useMemo(() => {
+    if (!activeLinkSnapshot || !activeSublinkId) {
+      return null;
+    }
+
+    return (
+      activeLinkSnapshot.sublinks.find(
+        (item) => item.id === activeSublinkId
+      ) ?? null
+    );
+  }, [activeLinkSnapshot, activeSublinkId]);
+
+  const hasPhoneSublink = useMemo(() => {
+    if (!activeLinkSnapshot) {
+      return false;
+    }
+
+    return activeLinkSnapshot.sublinks.some((item) =>
+      isTelephoneUrl(item.url)
+    );
+  }, [activeLinkSnapshot]);
+
+  const allowPhoneType =
+    !hasPhoneSublink ||
+    (activeSublink ? isTelephoneUrl(activeSublink.url) : false);
 
   const linksPerCategory = useMemo(() => {
     return links.reduce<Record<string, number>>((acc, link) => {
@@ -574,6 +612,7 @@ export default function SettingsPage() {
         onSubmit={handleSublinkSubmit}
         onClose={closeSublinkDialog}
         isSubmitting={isSublinkSubmitting}
+        allowPhoneType={allowPhoneType}
       />
     </main>
   );
