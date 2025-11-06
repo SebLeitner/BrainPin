@@ -32,7 +32,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: false   # 🧹 Kein Cache, keine Fehlermeldungen!
+          # 👇 kein cache-Parameter! Der ist jetzt komplett entfernt.
 
       - name: 📦 Install dependencies
         working-directory: frontend
