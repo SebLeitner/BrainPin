@@ -222,7 +222,6 @@ export function SublinkFormDialog({
             onChange={(event) => {
               if (linkType === "phone") {
                 setPhoneValue(event.target.value);
-                setRequiresPhoneConfirmation(false);
                 setPhoneNormalizationNotice(null);
               } else {
                 setUrlValue(event.target.value);
