@@ -12,7 +12,7 @@ export const extractPhoneNumber = (value: string): string => {
 
 export const sanitizePhoneNumber = (value: string): string => {
   const trimmed = value.trim();
-  const normalized = trimmed.replace(/[\s().-]/g, "");
+  const normalized = trimmed.replace(/[\s()./\-]/g, "");
 
   if (!normalized) {
     throw new Error("Bitte gib eine Telefonnummer an.");

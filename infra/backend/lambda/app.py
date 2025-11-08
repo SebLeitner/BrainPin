@@ -124,7 +124,7 @@ def _validate_string(value: Any, field: str, *, max_length: int, allow_empty: bo
 
 
 def _normalize_phone_number(raw: str, field: str) -> str:
-    digits = re.sub(r"[\s().-]", "", raw)
+    digits = re.sub(r"[\s()./\-]", "", raw)
     if digits == "":
         raise HttpError(400, f"'{field}' cannot be empty")
 
@@ -151,7 +151,7 @@ def _validate_url(url: Any, field: str = "url") -> str:
         normalized = _normalize_phone_number(phone, field)
         return f"tel:{normalized}"
 
-    if re.fullmatch(r"\+?[\d\s().-]+", trimmed):
+    if re.fullmatch(r"\+?[\d\s()./\-]+", trimmed):
         normalized = _normalize_phone_number(trimmed, field)
         return f"tel:{normalized}"
 
