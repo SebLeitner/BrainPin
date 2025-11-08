@@ -151,6 +151,10 @@ def _validate_url(url: Any, field: str = "url") -> str:
         normalized = _normalize_phone_number(phone, field)
         return f"tel:{normalized}"
 
+    if re.fullmatch(r"\+?[\d\s().-]+", trimmed):
+        normalized = _normalize_phone_number(trimmed, field)
+        return f"tel:{normalized}"
+
     if not re.match(r"^https?://", trimmed):
         raise HttpError(400, f"'{field}' must start with http:// or https://")
     return trimmed
