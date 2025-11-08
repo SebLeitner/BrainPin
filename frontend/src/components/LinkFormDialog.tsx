@@ -8,7 +8,11 @@ import { shallow } from "zustand/shallow";
 import { Modal } from "@/components/Modal";
 import { SublinkFormDialog, type SublinkFormValues } from "@/components/SublinkFormDialog";
 import { useLinksStore } from "@/store/useLinksStore";
-import { extractPhoneNumber, isTelephoneUrl } from "@/lib/sublinks";
+import {
+  extractPhoneNumber,
+  isTelephoneUrl,
+  sanitizePhoneNumber
+} from "@/lib/sublinks";
 import type { LinkItem, SublinkItem } from "@/types/links";
 
 const generateSublinkId = () => {
@@ -75,6 +79,12 @@ export function LinkFormDialog({
   );
   const [name, setName] = useState(initialValues?.name ?? "");
   const [url, setUrl] = useState(initialValues?.url ?? "");
+  const [linkType, setLinkType] = useState<"url" | "phone">(() =>
+    isTelephoneUrl(initialValues?.url ?? "") ? "phone" : "url"
+  );
+  const [phoneValue, setPhoneValue] = useState(() =>
+    extractPhoneNumber(initialValues?.url ?? "")
+  );
   const [description, setDescription] = useState(initialValues?.description ?? "");
   const [categoryIds, setCategoryIds] = useState<string[]>(
     () => deriveInitialCategoryIds(categories, initialValues?.categoryIds)
@@ -136,6 +146,8 @@ export function LinkFormDialog({
   useEffect(() => {
     setName(initialValues?.name ?? "");
     setUrl(initialValues?.url ?? "");
+    setLinkType(isTelephoneUrl(initialValues?.url ?? "") ? "phone" : "url");
+    setPhoneValue(extractPhoneNumber(initialValues?.url ?? ""));
     setDescription(initialValues?.description ?? "");
     setCategoryIds(deriveInitialCategoryIds(categories, initialValues?.categoryIds));
     setSublinks((initialValues?.sublinks ?? []).map((sublink) => ({ ...sublink })));
@@ -158,16 +170,26 @@ export function LinkFormDialog({
 
   const canSubmit = useMemo(() => {
     const trimmed = name.trim();
+    const currentValue = linkType === "phone" ? phoneValue : url;
     return (
       Boolean(trimmed) &&
       trimmed.length <= 16 &&
-      Boolean(url.trim()) &&
+      Boolean(currentValue.trim()) &&
       categoryIds.length > 0 &&
       hasCategories &&
       !isSublinkSubmitting &&
       pendingSublinkId === null
     );
-  }, [name, url, categoryIds, hasCategories, isSublinkSubmitting, pendingSublinkId]);
+  }, [
+    name,
+    url,
+    phoneValue,
+    linkType,
+    categoryIds,
+    hasCategories,
+    isSublinkSubmitting,
+    pendingSublinkId
+  ]);
 
   const handleSubmit = async () => {
     if (isSubmitting || isDeleting || isSublinkSubmitting || pendingSublinkId !== null) {
@@ -175,7 +197,8 @@ export function LinkFormDialog({
     }
 
     const trimmedName = name.trim();
-    const trimmedUrl = url.trim();
+    const currentValue = linkType === "phone" ? phoneValue : url;
+    const trimmedUrl = currentValue.trim();
     if (!trimmedName) {
       setError("Name darf nicht leer sein.");
       return;
@@ -185,12 +208,32 @@ export function LinkFormDialog({
       return;
     }
     if (!trimmedUrl) {
-      setError("Bitte gib eine URL an.");
+      setError(
+        linkType === "phone"
+          ? "Bitte gib eine Telefonnummer an."
+          : "Bitte gib eine URL an."
+      );
       return;
     }
     setError(null);
     setSubmitting(true);
     try {
+      let finalUrl = trimmedUrl;
+      if (linkType === "phone") {
+        try {
+          const sanitized = sanitizePhoneNumber(trimmedUrl);
+          setPhoneValue(sanitized);
+          finalUrl = `tel:${sanitized}`;
+        } catch (phoneError) {
+          const message =
+            phoneError instanceof Error
+              ? phoneError.message
+              : "Ungültige Telefonnummer.";
+          setError(message);
+          setSubmitting(false);
+          return;
+        }
+      }
       const trimmedDescription = description.trim();
       const normalizedSublinks = sublinks.map((sublink) => {
         if (typeof sublink.description === "string") {
@@ -208,7 +251,7 @@ export function LinkFormDialog({
       });
       await onSubmit({
         name: trimmedName,
-        url: trimmedUrl,
+        url: finalUrl,
         description: trimmedDescription.length > 0 ? trimmedDescription : null,
         categoryIds,
         sublinks: normalizedSublinks
@@ -223,6 +266,15 @@ export function LinkFormDialog({
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleLinkTypeChange = (nextType: "url" | "phone") => {
+    if (isBusy) {
+      return;
+    }
+
+    setLinkType(nextType);
+    setError(null);
   };
 
   const handleDelete = async () => {
@@ -434,14 +486,49 @@ export function LinkFormDialog({
           </label>
           <p className="mt-1 text-xs text-slate-400">Maximal 16 Zeichen – wird auf der Kachel angezeigt.</p>
         </div>
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-medium text-slate-200">Typ</span>
+          <div className="inline-flex items-center gap-2">
+            <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-200">
+              <input
+                type="radio"
+                name="link-type"
+                value="url"
+                checked={linkType === "url"}
+                onChange={() => handleLinkTypeChange("url")}
+                className="h-3 w-3"
+                disabled={isBusy}
+              />
+              Weblink
+            </label>
+            <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-200">
+              <input
+                type="radio"
+                name="link-type"
+                value="phone"
+                checked={linkType === "phone"}
+                onChange={() => handleLinkTypeChange("phone")}
+                className="h-3 w-3"
+                disabled={isBusy}
+              />
+              Telefonnummer
+            </label>
+          </div>
+        </div>
         <label className="block text-sm font-medium text-slate-200">
-          URL
+          {linkType === "phone" ? "Telefonnummer" : "URL"}
           <input
-            value={url}
-            onChange={(event) => setUrl(event.target.value)}
+            value={linkType === "phone" ? phoneValue : url}
+            onChange={(event) => {
+              if (linkType === "phone") {
+                setPhoneValue(event.target.value);
+              } else {
+                setUrl(event.target.value);
+              }
+            }}
             className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 focus:border-brand-400"
-            placeholder="https://"
-            inputMode="url"
+            placeholder={linkType === "phone" ? "+49 123 456789" : "https://"}
+            inputMode={linkType === "phone" ? "tel" : "url"}
           />
         </label>
         <div>
