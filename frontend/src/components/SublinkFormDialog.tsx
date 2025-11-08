@@ -44,7 +44,6 @@ export function SublinkFormDialog({
   const [linkType, setLinkType] = useState<"url" | "phone">(() =>
     isTelephoneUrl(initialValues.url) ? "phone" : "url"
   );
-  const [requiresPhoneConfirmation, setRequiresPhoneConfirmation] = useState(false);
   const [phoneNormalizationNotice, setPhoneNormalizationNotice] = useState<string | null>(null);
 
   useEffect(() => {
@@ -58,7 +57,6 @@ export function SublinkFormDialog({
     setDescription(initialValues.description);
     setLinkType(isTelephoneUrl(initialValues.url) ? "phone" : "url");
     setError(null);
-    setRequiresPhoneConfirmation(false);
     setPhoneNormalizationNotice(null);
   }, [initialValues, open]);
 
@@ -73,7 +71,6 @@ export function SublinkFormDialog({
     }
 
     setLinkType(nextType);
-    setRequiresPhoneConfirmation(false);
     setPhoneNormalizationNotice(null);
   };
 
@@ -107,20 +104,14 @@ export function SublinkFormDialog({
     if (linkType === "phone") {
       try {
         const sanitized = sanitizePhoneNumber(trimmedValue);
-        if (sanitized !== trimmedValue) {
-          setPhoneValue(sanitized);
-          setRequiresPhoneConfirmation(true);
-          setPhoneNormalizationNotice(
-            "Die Telefonnummer wurde automatisch formatiert. Bitte prüfe sie und speichere erneut, um die Änderung zu übernehmen."
-          );
-          return;
-        }
+        const hasNormalizationChange = sanitized !== trimmedValue;
 
-        if (requiresPhoneConfirmation) {
-          setRequiresPhoneConfirmation(false);
-        }
-
-        setPhoneNormalizationNotice(null);
+        setPhoneValue(sanitized);
+        setPhoneNormalizationNotice(
+          hasNormalizationChange
+            ? "Die Telefonnummer wurde automatisch formatiert. Bitte prüfe sie."
+            : null
+        );
         finalUrl = `tel:${sanitized}`;
       } catch (phoneError) {
         const message =
