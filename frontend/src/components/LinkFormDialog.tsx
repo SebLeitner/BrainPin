@@ -11,7 +11,8 @@ import { useLinksStore } from "@/store/useLinksStore";
 import {
   extractPhoneNumber,
   isTelephoneUrl,
-  sanitizePhoneNumber
+  sanitizePhoneNumber,
+  validateHttpUrl
 } from "@/lib/sublinks";
 import type { LinkItem, SublinkItem } from "@/types/links";
 
@@ -93,6 +94,9 @@ export function LinkFormDialog({
     (initialValues?.sublinks ?? []).map((sublink) => ({ ...sublink }))
   );
   const [error, setError] = useState<string | null>(null);
+  const [phoneNormalizationNotice, setPhoneNormalizationNotice] = useState<string | null>(
+    null
+  );
   const [isSubmitting, setSubmitting] = useState(false);
   const [isDeleting, setDeleting] = useState(false);
   const [isSublinkDialogOpen, setSublinkDialogOpen] = useState(false);
@@ -160,6 +164,7 @@ export function LinkFormDialog({
     setSublinkSubmitting(false);
     setPendingSublinkId(null);
     setSublinkListError(null);
+    setPhoneNormalizationNotice(null);
   }, [initialValues, open, categories]);
 
   useEffect(() => {
@@ -216,39 +221,64 @@ export function LinkFormDialog({
       return;
     }
     setError(null);
-    setSubmitting(true);
-    try {
-      let finalUrl = trimmedUrl;
-      if (linkType === "phone") {
-        try {
-          const sanitized = sanitizePhoneNumber(trimmedUrl);
-          setPhoneValue(sanitized);
-          finalUrl = `tel:${sanitized}`;
-        } catch (phoneError) {
-          const message =
-            phoneError instanceof Error
-              ? phoneError.message
-              : "Ungültige Telefonnummer.";
-          setError(message);
-          setSubmitting(false);
+
+    let finalUrl = trimmedUrl;
+
+    if (linkType === "phone") {
+      try {
+        const { normalized, hasChanged } = sanitizePhoneNumber(trimmedUrl);
+        setPhoneValue(normalized);
+        setPhoneNormalizationNotice(
+          hasChanged
+            ? "Die Telefonnummer wurde in das internationale Format übertragen. Bitte prüfe sie und speichere erneut."
+            : null
+        );
+
+        if (hasChanged) {
           return;
         }
-      }
-      const trimmedDescription = description.trim();
-      const normalizedSublinks = sublinks.map((sublink) => {
-        if (typeof sublink.description === "string") {
-          const trimmed = sublink.description.trim();
-          return {
-            ...sublink,
-            description: trimmed.length > 0 ? trimmed : null
-          };
-        }
 
+        finalUrl = `tel:${normalized}`;
+      } catch (phoneError) {
+        const message =
+          phoneError instanceof Error
+            ? phoneError.message
+            : "Ungültige Telefonnummer.";
+        setError(message);
+        return;
+      }
+    } else {
+      try {
+        finalUrl = validateHttpUrl(trimmedUrl);
+      } catch (urlError) {
+        const message =
+          urlError instanceof Error
+            ? urlError.message
+            : "Ungültige URL.";
+        setError(message);
+        return;
+      }
+      setPhoneNormalizationNotice(null);
+    }
+
+    const trimmedDescription = description.trim();
+    const normalizedSublinks = sublinks.map((sublink) => {
+      if (typeof sublink.description === "string") {
+        const trimmed = sublink.description.trim();
         return {
           ...sublink,
-          description: sublink.description ?? null
+          description: trimmed.length > 0 ? trimmed : null
         };
-      });
+      }
+
+      return {
+        ...sublink,
+        description: sublink.description ?? null
+      };
+    });
+
+    setSubmitting(true);
+    try {
       await onSubmit({
         name: trimmedName,
         url: finalUrl,
@@ -256,6 +286,7 @@ export function LinkFormDialog({
         categoryIds,
         sublinks: normalizedSublinks
       });
+      setPhoneNormalizationNotice(null);
       onClose();
     } catch (submitError) {
       const message =
@@ -275,6 +306,7 @@ export function LinkFormDialog({
 
     setLinkType(nextType);
     setError(null);
+    setPhoneNormalizationNotice(null);
   };
 
   const handleDelete = async () => {
@@ -522,6 +554,7 @@ export function LinkFormDialog({
             onChange={(event) => {
               if (linkType === "phone") {
                 setPhoneValue(event.target.value);
+                setPhoneNormalizationNotice(null);
               } else {
                 setUrl(event.target.value);
               }
@@ -531,6 +564,9 @@ export function LinkFormDialog({
             inputMode={linkType === "phone" ? "tel" : "url"}
           />
         </label>
+        {linkType === "phone" && phoneNormalizationNotice ? (
+          <p className="text-xs text-amber-300">{phoneNormalizationNotice}</p>
+        ) : null}
         <div>
           <p className="text-sm font-medium text-slate-200">Kategorien</p>
           {hasCategories ? (

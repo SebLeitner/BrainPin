@@ -6,7 +6,8 @@ import { Modal } from "@/components/Modal";
 import {
   extractPhoneNumber,
   isTelephoneUrl,
-  sanitizePhoneNumber
+  sanitizePhoneNumber,
+  validateHttpUrl
 } from "@/lib/sublinks";
 
 export type SublinkFormValues = {
@@ -99,20 +100,28 @@ export function SublinkFormDialog({
 
     setError(null);
 
-    let finalUrl = trimmedValue;
-
     if (linkType === "phone") {
       try {
-        const sanitized = sanitizePhoneNumber(trimmedValue);
-        const hasNormalizationChange = sanitized !== trimmedValue;
+        const { normalized, hasChanged } = sanitizePhoneNumber(trimmedValue);
 
-        setPhoneValue(sanitized);
+        setPhoneValue(normalized);
         setPhoneNormalizationNotice(
-          hasNormalizationChange
-            ? "Die Telefonnummer wurde automatisch formatiert. Bitte prüfe sie."
+          hasChanged
+            ? "Die Telefonnummer wurde in das internationale Format übertragen. Bitte prüfe sie und speichere erneut."
             : null
         );
-        finalUrl = `tel:${sanitized}`;
+
+        if (hasChanged) {
+          return;
+        }
+
+        await onSubmit({
+          name: trimmedName,
+          url: `tel:${normalized}`,
+          description: description.trim()
+        });
+        setPhoneNormalizationNotice(null);
+        return;
       } catch (phoneError) {
         const message =
           phoneError instanceof Error
@@ -124,9 +133,11 @@ export function SublinkFormDialog({
     }
 
     try {
+      const urlToPersist = validateHttpUrl(trimmedValue);
+
       await onSubmit({
         name: trimmedName,
-        url: finalUrl,
+        url: urlToPersist,
         description: description.trim()
       });
       setPhoneNormalizationNotice(null);
