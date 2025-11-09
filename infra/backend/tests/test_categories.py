@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 import boto3
+import pytest
 from moto import mock_aws
 
 
@@ -204,3 +205,31 @@ def test_links_require_existing_categories_and_block_category_deletion():
 
     allowed_delete = app.handler(delete_category_event, None)
     assert allowed_delete["statusCode"] == 204
+
+
+def _prepare_environment_for_validation_tests() -> None:
+    os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+    os.environ["TABLE_NAME"] = "validation-links"
+    os.environ["CATEGORIES_TABLE_NAME"] = "validation-categories"
+    os.environ.setdefault("ALLOWED_ORIGIN", "https://example.org")
+
+
+@mock_aws()
+def test_validate_url_accepts_plain_phone_number():
+    _prepare_environment_for_validation_tests()
+    app = load_lambda_app()
+
+    result = app._validate_url("+49 123 456789", "url")
+
+    assert result == "tel:+49123456789"
+
+
+@mock_aws()
+def test_validate_url_requires_http_for_non_phone_values():
+    _prepare_environment_for_validation_tests()
+    app = load_lambda_app()
+
+    with pytest.raises(app.HttpError) as excinfo:
+        app._validate_url("example.com", "url")
+
+    assert "must start with http:// or https://" in str(excinfo.value)
