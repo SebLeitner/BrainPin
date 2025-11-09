@@ -33,7 +33,7 @@ export const sanitizePhoneNumber = (value: string): PhoneSanitizeResult => {
     normalized = `+${normalized.slice(2)}`;
   }
 
-  const plusCount = [...normalized].filter((char) => char === "+").length;
+  const plusCount = normalized.split("+").length - 1;
 
   if (plusCount > 1) {
     throw new Error("Ungültige Telefonnummer. Es darf nur ein + enthalten sein.");
