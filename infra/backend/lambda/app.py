@@ -128,6 +128,9 @@ def _normalize_phone_number(raw: str, field: str) -> str:
     if digits == "":
         raise HttpError(400, f"'{field}' cannot be empty")
 
+    if digits.startswith("00"):
+        digits = "+" + digits[2:]
+
     plus_count = digits.count("+")
     if plus_count > 1:
         raise HttpError(400, f"'{field}' contains too many '+' characters")
@@ -139,7 +142,19 @@ def _normalize_phone_number(raw: str, field: str) -> str:
     if not number.isdigit():
         raise HttpError(400, f"'{field}' may only contain digits aside from a leading '+'")
 
-    return f"+{number}" if digits.startswith("+") else number
+    if digits.startswith("+"):
+        if number == "":
+            raise HttpError(400, f"'{field}' cannot be empty")
+        return f"+{number}"
+
+    stripped = number.lstrip("0")
+    if stripped == "":
+        raise HttpError(
+            400,
+            f"'{field}' must include digits after removing leading zeros or contain an international prefix",
+        )
+
+    return f"+49{stripped}"
 
 
 def _validate_url(url: Any, field: str = "url") -> str:
